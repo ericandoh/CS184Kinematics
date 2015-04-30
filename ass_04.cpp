@@ -46,6 +46,9 @@ https://www3.ntu.edu.sg/home/ehchua/programming/opengl/CG_Examples.html
 IO Stuff
 http://www.cplusplus.com/doc/tutorial/files/
 
+Cylinder btw 2 points
+http://lifeofaprogrammergeek.blogspot.com/2008/07/rendering-cylinder-between-two-points.html
+
 //****************************************************
 */
 
@@ -72,17 +75,6 @@ struct color {
 };
 typedef struct color color;
 
-struct point {
-  vec3 pos;
-  vec3 norm;
-};
-typedef struct point point;
-
-struct triangle {
-  point a, b, c;
-  color* color;
-};
-typedef struct triangle triangle;
 
 
 //****************************************************
@@ -90,6 +82,23 @@ typedef struct triangle triangle;
 //****************************************************
 
 Viewport  viewport;
+
+int joint_count = 4;
+
+int frame_count = 1000;
+
+// array of rotations; size joint_count
+vec3* rotations;
+
+// array of joint positions + endpoint; size joint_count + 1
+vec3* points;
+
+//all points
+vec3** allpoints;
+
+//our goal point
+vec3 goal;
+
 
 void myDisplay();
 
@@ -277,10 +286,46 @@ float magnitude(vec3* a) {
   return sqrt(a->x * a->x + a->y * a->y + a->z * a->z);
 }
 
+float** penroseInverse() {
+  //return pernose inverse
+}
+
+//****************************************************
+// Meat of the assignment
+//****************************************************
+
+void calculateRotations() {
+  //initialize rotations + setup stuff relevant to this assignemtn in particular
+
+
+  //while loop...
+    //updateJoint()
+    //save points from updateJoint to allpoints
+}
+
+//one iteration of the joint algorithm
+//should be called by my myDisplay method
+void updateJoint() {
+  //find jacobian
+  //find dr
+  //update rotations + return rotations
+}
+
+float** calculateJacobian() {
+
+}
+
+
+
+
+
+
+
 //****************************************************
 // Draw a random ass triangle 
 //****************************************************
 
+/*
 void drawTriangle(triangle *triangle) {
   glBegin(GL_TRIANGLES);
 
@@ -294,7 +339,7 @@ void drawTriangle(triangle *triangle) {
   glVertex3f( triangle->c.pos.x, triangle->c.pos.y, triangle->c.pos.z );
 
   glEnd();
-}
+}*/
 
 //****************************************************
 // function that does the actual drawing of stuff
@@ -322,6 +367,8 @@ void myDisplay() {
       glTranslated(0.0,0.0,0.0);
       glutSolidSphere(1,50,50);
   glPopMatrix();
+
+  //go through allpoints, render balls + joints
 
   glFlush();
   glutSwapBuffers();          // swap buffers (we earlier set double buffer)
