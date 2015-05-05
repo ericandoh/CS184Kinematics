@@ -90,6 +90,9 @@ int frame_count = 1000;
 // array of rotations; size joint_count
 vec3* rotations;
 
+// array of joint lengths; size joint_count
+float* lengths;
+
 // array of joint positions + endpoint; size joint_count + 1
 vec3* points;
 
@@ -101,6 +104,8 @@ vec3 goal;
 
 
 void myDisplay();
+
+float** calculateJacobian(vec3* rotations[], float lengths[], int n);
 
 //****************************************************
 // Simple init function
@@ -125,7 +130,6 @@ void initScene() {
   mat_ambient[choice] = 0.8;
   
   choice = rand() % 3;
-  cout << choice;
   mat_diffuse[choice] = 1.0;
 
   GLfloat mat_specular[] = { 1.0, 1.0, 1.0 };
@@ -286,6 +290,264 @@ float magnitude(vec3* a) {
   return sqrt(a->x * a->x + a->y * a->y + a->z * a->z);
 }
 
+void setIdentity(float matrix[][3]) {
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3; y++) {
+      matrix[x][y] = (x == y) ? 1.0f : 0.0f;
+    }
+  }
+}
+
+void setIdentity4(float matrix[][4]) {
+  for (int x = 0; x < 4; x++) {
+    for (int y = 0; y < 4; y++) {
+      matrix[x][y] = (x == y) ? 1.0f : 0.0f;
+    }
+  }
+}
+
+void addMatrix(float dest[][3], float a[][3], float b[][3]) {
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3; y++) {
+      dest[x][y] = a[x][y] + b[x][y];
+    }
+  }
+}
+
+void scaleMatrix(float dest[][3], float src[][3], float scl) {
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3; y++) {
+      dest[x][y] = src[x][y] * scl;
+    }
+  }
+}
+
+void mulMatrixVector(vec3* dest, float a[][3], vec3* b) {
+  //a = i,j (3x3)
+  //b = j,1 (3x1)
+  //result = i,1 (3x1)
+  vec3 temp;
+  float val;
+  for (int i = 0; i < 3; i++) {
+    val = 0;
+    //iterate j from 0 to 2
+    val += a[i][0] * b->x;
+    val += a[i][1] * b->y;
+    val += a[i][2] * b->z;
+    if (i == 0) {
+      temp.x = val;
+    }
+    else if (i == 1) {
+      temp.y = val;
+    }
+    else {
+      temp.z = val;
+    }
+  }
+  set(dest, &temp);
+}
+
+void mulMatrix3(float dest[][3], float a[][3], float b[][3]) {
+  float temp[3][3];
+  for (int n = 0; n < 3; n++) {
+    for (int p = 0; p < 3; p++) {
+      temp[n][p] = 0;
+      for (int j = 0; j < 3; j++) {
+        temp[n][p] += a[n][j] * b[j][p];
+      }
+    }
+  }
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3; y++) {
+      dest[x][y] = temp[x][y];
+    }
+  }
+}
+
+void mulMatrix4(float dest[][4], float a[][4], float b[][4]) {
+  float temp[4][4];
+  for (int n = 0; n < 4; n++) {
+    for (int p = 0; p < 4; p++) {
+      temp[n][p] = 0;
+      for (int j = 0; j < 4; j++) {
+        temp[n][p] += a[n][j] * b[j][p];
+      }
+    }
+  }
+  for (int x = 0; x < 4; x++) {
+    for (int y = 0; y < 4; y++) {
+      dest[x][y] = temp[x][y];
+    }
+  }
+}
+
+//calculates the homogenized (4x4) transform matrix
+//given a rotation and a length
+void getHomogenized(float dest[][4], float rotation[][3], float length) {
+  //calculate pi
+  vec3 pi;
+  vec3 temp_length;
+  temp_length.x = length;
+  temp_length.y = 0;
+  temp_length.z = 0;
+
+  mulMatrixVector(&pi, rotation, &temp_length);
+
+  //set rotation parts of Xi
+  for (int x = 0; x < 3; x++){
+    for (int y = 0; y < 3; y++) {
+      dest[x][y] = rotation[x][y];
+    }
+  }
+  //set translation (pi) parts of Xi
+  dest[0][3] = pi.x;
+  dest[1][3] = pi.y;
+  dest[2][3] = pi.z;
+  //set corner to 1 - we apply this to points not directions
+  dest[3][3] = 1;
+}
+
+void applyTransform(vec3* dest, float a[][4], vec3* b) {
+  //a = i,j (4x4)
+  //b = j,1 (4x1)
+  //result = i,1 (4x1)=>cut to (3x1)
+  vec3 temp;
+  float val;
+  float scl = 1.0f;
+  for (int i = 0; i < 4; i++) {
+    val = 0;
+    //iterate j from 0 to 3
+    val += a[i][0] * b->x;
+    val += a[i][1] * b->y;
+    val += a[i][2] * b->z;
+    val += a[i][3];
+    if (i == 0) {
+      temp.x = val;
+    }
+    else if (i == 1) {
+      temp.y = val;
+    }
+    else if (i == 2) {
+      temp.z = val;
+    }
+    else {
+      //should be 1
+      scl = val;
+    }
+  }
+  scale(dest, &temp, 1 / scl);
+}
+
+void crossProductMatrix(float dest[][3], vec3* a) {
+  dest[0][0] = 0;
+  dest[0][1] = -a->z;
+  dest[0][2] = a->y;
+
+  dest[1][0] = a->z;
+  dest[1][1] = 0;
+  dest[1][2] = -a->x;
+
+  dest[2][0] = -a->y;
+  dest[2][1] = a->x;
+  dest[2][2] = 0;
+}
+
+void visualizeVector(vec3* a) {
+  cout << a->x << "," << a->y << "," << a->z << "\n";
+}
+
+void visualize(float matrix[][3]) {
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3; y++) {
+      cout << matrix[x][y] << ",";
+    }
+    cout << "\n";
+  }
+}
+
+void testFunction() {
+  cout << "begin tests\n";
+
+  /*
+  //matrix tests
+  float temp[3][3];
+  setIdentity(temp);
+  visualize(temp);
+
+  scaleMatrix(temp, temp, 3);
+  temp[0][2] = 4.0f;
+  visualize(temp);
+
+  float temp2[3][3];
+  setIdentity(temp2);
+  temp2[2][0] = 2.0f;
+  visualize(temp2);
+
+  mulMatrix3(temp2, temp, temp2);
+  visualize(temp2);
+
+  vec3 temp3;
+  temp3.x = 1;
+  temp3.y = 2;
+  temp3.z = 3;
+
+  setIdentity(temp);
+  temp[0][0] = 2;
+  temp[1][0] = 3;
+  temp[0][2] = 4;
+  visualize(temp);
+
+  mulMatrixVector(&temp3, temp, &temp3);
+  cout << temp3.x << "," << temp3.y << "," << temp3.z << "\n";
+  */
+
+  //jacobian tests
+  int n = 4;
+  vec3* rotations[n];
+  vec3 rotationSource[n];
+  float lengths[n];
+
+  rotationSource[0].x = 0;
+  rotationSource[0].y = 0;
+  rotationSource[0].z = 0;
+
+  rotationSource[1].x = 0;
+  rotationSource[1].y = 0;
+  rotationSource[1].z = 0;
+
+  rotationSource[2].x = 0;
+  rotationSource[2].y = 0;
+  rotationSource[2].z = 0;
+
+  rotationSource[3].x = 0;
+  rotationSource[3].y = 0;
+  rotationSource[3].z = 0;
+  for (int i = 0; i < n; i++)
+    rotations[i] = &(rotationSource[i]);
+  lengths[0] = 1;
+  lengths[1] = 2;
+  lengths[2] = 3;
+  lengths[3] = 4;
+
+  float** jac = calculateJacobian(rotations, lengths, n);
+
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3 * n; y++) {
+      cout << jac[x][y] << ",";
+    }
+    cout << "\n";
+  }
+
+  for (int x = 0; x < 3; x++){
+   free(jac[x]);
+  }
+  free(jac);
+
+
+
+  cout << "end tests\n";
+}
+
 float** penroseInverse() {
   //return pernose inverse
 }
@@ -311,8 +573,123 @@ void updateJoint() {
   //update rotations + return rotations
 }
 
-float** calculateJacobian() {
+//calculates the rotation matrix 3x3 from an exponential map vector
+//via the Rodriguez formula
+void calculateRi(float dest[][3], vec3* rotation) {
 
+  //R = ((r rt)+sin(theta)(rx)-cos(theta)(rx)(rx))
+  //OR: R = I + (sin0)K+(1-cos0)K^2
+
+  vec3 axis;
+  set(&axis, rotation);
+
+  float theta = magnitude(rotation);
+  if (theta != 0) {
+    normalize(&axis);
+  }
+
+  float temp[3][3];
+
+  float rax[3][3];
+  rax[0][0] = 0.0f;
+  rax[0][1] = -axis.z;
+  rax[0][2] = axis.y;
+  rax[1][0] = axis.z;
+  rax[1][1] = 0.0f;
+  rax[1][2] = -axis.x;
+  rax[2][0] = -axis.y;
+  rax[2][1] = axis.x;
+  rax[2][2] = 0.0f;
+
+  float sint = sin(theta);
+  float oneMinusCost = 1.0f - cos(theta);
+
+  //dest = I
+  setIdentity(dest);
+  //temp = sint*(Rx)
+  scaleMatrix(temp, rax, sint);
+  //dest = I + sint*(Rx)
+  addMatrix(dest, dest, temp);
+  //temp = (Rx)(Rx)
+  mulMatrix3(temp, rax, rax);
+
+  //temp = (1-cost)*(Rx)^2
+  scaleMatrix(temp, temp, oneMinusCost);
+  //dest = I + sint*(Rx) + (1-cost)*(Rx)^2
+  addMatrix(dest, dest, temp);
+}
+
+float** calculateJacobian(vec3* rotations[], float lengths[], int n) {
+  //what we'll return
+  float** jac = (float**)malloc(sizeof(float*) * 3);
+  for (int i = 0; i < 3; i++) {
+    jac[i] = (float*)malloc(sizeof(float)*3*n);
+  }
+
+  //temp J_i var used to hold part of Jacobian at each part
+  float ji[3][3];
+
+  //variable to hold all Rodriguez rotation matrices
+  float rotation_matrices[n][3][3];
+
+  //variable to hold all Xi transformation matrices
+  float transformation_matrices[n][4][4];
+
+  //calculate all R_i matrices
+  for (int i = 0; i < n; i++) {
+    calculateRi(rotation_matrices[i], rotations[i]);
+  }
+
+  //calculate pn and hold it separately
+  vec3 pn;
+  vec3 temp_length;
+  temp_length.x = lengths[n - 1];
+  temp_length.y = 0;
+  temp_length.z = 0;
+
+  mulMatrixVector(&pn, rotation_matrices[n - 1], &temp_length);
+
+  //calculate all X_i's
+  for (int i = 0; i < n; i++) {
+    getHomogenized(transformation_matrices[i], rotation_matrices[i], lengths[i]);
+  }
+  
+  float r_i_to_zero[3][3];
+  float x_n_to_i[4][4];
+  vec3 crossMeAndYouDie;
+  float cpMatrix[3][3];
+  for (int i = 0; i < n; i++) {
+    //ji = -R_(i->0) cross[X_(n->i) p_n]
+    //calculate R_(i->0)
+    setIdentity(r_i_to_zero);
+    for (int k = i - 1; k >= 0; k--) {
+      mulMatrix3(r_i_to_zero, r_i_to_zero, rotation_matrices[k]);
+    }
+
+    setIdentity4(x_n_to_i);
+    for (int k = n - 2; k >= i; k--) {
+      mulMatrix4(x_n_to_i, x_n_to_i, transformation_matrices[k]);
+    }
+    // X_n->i * p_n
+    applyTransform(&crossMeAndYouDie, x_n_to_i, &pn);
+
+    // cross[ X_n->i * p_n ]
+    crossProductMatrix(cpMatrix, &crossMeAndYouDie);
+
+    // R_(i->0) cross[X_(n->i) p_n]
+    mulMatrix3(cpMatrix, r_i_to_zero, cpMatrix);
+
+    //add a minus
+    scaleMatrix(cpMatrix, cpMatrix, -1.0f);
+
+    //add result to our jacobian
+    for (int x = 0; x < 3; x++) {
+      for (int y = 0; y < 3; y++) {
+        jac[x][i * 3 + y] = cpMatrix[x][y];
+      }
+    }
+  }
+  return jac;
 }
 
 
@@ -378,6 +755,8 @@ void myDisplay() {
 // the usual stuff, nothing exciting here
 //****************************************************
 int main(int argc, char *argv[]) {
+
+  testFunction();
 
   //parse in command line arguments
   /*if (argc < 3) {
