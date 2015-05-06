@@ -88,6 +88,7 @@ int joint_count = 4;
 int frame_count = 1000;
 
 float epsilon = 1.0f;
+float lambda = 0.1f;
 
 // array of rotations; size joint_count
 vec3* rotations;
@@ -104,6 +105,7 @@ vec3** allpoints;
 //our goal point
 vec3 goal;
 
+std::vector<float> dr_lst;
 
 void myDisplay();
 
@@ -554,6 +556,17 @@ float** penroseInverse() {
   //return pernose inverse
 }
 
+void finddr(float** pseudo_inverse, vec3* vec, int n) {
+  float val;
+  for(int i = 0; i < n; i++) {
+    val = 0;
+    val += pseudo_inverse[i][0] * vec->x;
+    val += pseudo_inverse[i][1] * vec->y;
+    val += pseudo_inverse[i][2] * vec->z;
+    dr_lst.push_back(val);
+  }
+}
+
 //****************************************************
 // Meat of the assignment
 //****************************************************
@@ -571,7 +584,7 @@ void calculateRotations() {
   vec3 end_effector;
   findEndEffector(&end_effector, rotations, lengths, joint_count);
   while(!reachedGoal(&end_effector, &goal, lengths, joint_count, epsilon)) {
-    updateJoint();
+    updateJoint(&end_effector);
     //save points from updateJoint to allpoints
     
     
@@ -581,10 +594,36 @@ void calculateRotations() {
 
 //one iteration of the joint algorithm
 //should be called by my myDisplay method
-void updateJoint() {
+void updateJoint(vec3* end_effector) {
   //find jacobian
+  float** jac = calculateJacobian(rotations, lengths, joint_count);
+  //get pseudoinverse
+  float** pseudo_inverse = pernoseInverse(jac);
+  
+  // lambda * (g - pe)
+  vec3 temp;
+  subtract(&temp, &goal, &end_effector);
+  scale(&temp, lambda);
+  
   //find dr
-  //update rotations + return rotations
+  //dr is stored in an arraylist called dr_lst
+  finddr(pseudo_inverse, &temp, joint_count);
+  
+  //update rotations
+  for(int i = 0; i < dr_lst.size(); i++) {
+    if(i % 3 == 0) {
+      rotations[i / 3].x += dr_lst.at(i);
+    }
+    else if(i % 3 == 1) {
+      rotations[i / 3].y += dr_lst.at(i);
+    }
+    else {
+      rotations[i / 3].z += dr_lst.at(i);
+    }
+  }
+  
+  //find pi (the positions of each joint)
+  //render in openGL
 }
 
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon) {
