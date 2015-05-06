@@ -91,37 +91,26 @@ typedef struct color color;
 
 Viewport  viewport;
 
-int joint_count = 4;
-
 int frame_count = 1000;
 
 float epsilon = 1.0f;
 float lambda = 0.1f;
 
-// array of rotations; size joint_count
-vec3* rotations;
-
-// array of joint lengths; size joint_count
-float* lengths;
-
-// array of joint positions + endpoint; size joint_count + 1
-vec3* points;
-
 //all points
-vec3** allpoints;
-
-//our goal point
-vec3 goal;
+std::vector<vec3> allpoints;
 
 std::vector<float> dr_lst;
 
 void myDisplay();
 
-void findEndEffector(vec3* end_effector, vec3 rotations[], float lengths[], int n);
+void updateCalculations(float rotation_matrices[][3][3], vec3 pi_vectors[], 
+  float transformation_matrices[][4][4], vec3 rotations[], float lengths[], int n);
+
+void findEndEffector(vec3* end_effector, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n);
 
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon);
 
-float** calculateJacobian(vec3 rotations[], float lengths[], int n);
+float** calculateJacobian(float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n);
 
 void calculateRi(float dest[][3], vec3* rotation);
 
@@ -423,6 +412,11 @@ void getHomogenized(float dest[][4], float rotation[][3], float length) {
   dest[2][3] = pi.z;
   //set corner to 1 - we apply this to points not directions
   dest[3][3] = 1;
+
+  //zero bottom parts
+  dest[3][0] = 0;
+  dest[3][1] = 0;
+  dest[3][2] = 0;
 }
 
 void applyTransform(vec3* dest, float a[][4], vec3* b) {
@@ -521,31 +515,50 @@ void testFunction() {
 
   //jacobian tests
   int n = 4;
-  vec3 rotationSource[n];
+  vec3 rotations[n];
   float lengths[n];
 
-  rotationSource[0].x = 0;
-  rotationSource[0].y = 0;
-  rotationSource[0].z = 0;
+  rotations[0].x = 0;
+  rotations[0].y = 0;
+  rotations[0].z = 0;
 
-  rotationSource[1].x = 0;
-  rotationSource[1].y = 0;
-  rotationSource[1].z = 0;
+  rotations[1].x = 0;
+  rotations[1].y = 0;
+  rotations[1].z = 0;
 
-  rotationSource[2].x = 0;
-  rotationSource[2].y = 0;
-  rotationSource[2].z = 0;
+  rotations[2].x = 0;
+  rotations[2].y = 0;
+  rotations[2].z = 0;
 
-  rotationSource[3].x = 0;
-  rotationSource[3].y = 0;
-  rotationSource[3].z = 0;
+  rotations[3].x = 0;
+  rotations[3].y = 0;
+  rotations[3].z = 0;
 
   lengths[0] = 1;
   lengths[1] = 2;
   lengths[2] = 3;
   lengths[3] = 4;
 
-  float** jac = calculateJacobian(rotationSource, lengths, n);
+  //variable to hold all Rodriguez rotation matrices
+  float rotation_matrices[n][3][3];
+
+  //variable to hold all pi displacement vectors
+  vec3 pi_vectors[n];
+
+  //variable to hold all Xi transformation matrices
+  float transformation_matrices[n][4][4];
+
+  updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
+
+  for (int x = 0; x < 4; x++) {
+    for (int y = 0; y < 4; y++) {
+      cout << transformation_matrices[1][x][y] << ",";
+    }
+    cout << "\n";
+  }
+  cout << "new" << endl;
+
+  float** jac = calculateJacobian(rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
 
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3 * n; y++) {
@@ -653,20 +666,21 @@ void finddr(float** pseudo_inverse, vec3* vec, int n) {
 
 //one iteration of the joint algorithm
 //should be called by my myDisplay method
-void updateJoint(vec3* end_effector, int n) {
+//updates rotations[]
+void updateJoint(vec3 rotations[], vec3* end_effector, vec3* goal, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) {
   //find jacobian
-  float** jac = calculateJacobian(rotations, lengths, joint_count);
+  float** jac = calculateJacobian(rotation_matrices, transformation_matrices, pn, n);
   //get pseudoinverse
   float** pseudo_inverse = penroseInverse(jac, n);
   
   // lambda * (g - pe)
   vec3 temp;
-  subtract(&temp, &goal, end_effector);
+  subtract(&temp, goal, end_effector);
   scale(&temp, &temp, lambda);
   
   //find dr
   //dr is stored in an arraylist called dr_lst
-  finddr(pseudo_inverse, &temp, joint_count);
+  finddr(pseudo_inverse, &temp, n);
   
   //update rotations
   for(int i = 0; i < dr_lst.size(); i++) {
@@ -685,25 +699,85 @@ void updateJoint(vec3* end_effector, int n) {
   //render in openGL
 }
 
+//given an array of rotations (exp maps in vec3), and an array of lengths
+//calculates rotation_matrices (rodriguez matrices for rotation)
+//calculates pi_vectors (individual joint displacements)
 
-void calculateRotations(int joint_count, float lengths[]) {
-  //initialize rotations + setup stuff relevant to this assignemtn in particular
+void updateCalculations(float rotation_matrices[][3][3], vec3 pi_vectors[], 
+  float transformation_matrices[][4][4], vec3 rotations[], float lengths[], int n) {
+
+  //calculate all Ri rotation matrices
+  for (int i = 0; i < n; i++) {
+    calculateRi(rotation_matrices[i], &(rotations[i]));
+  }
+
+  //calculates all pi vectors
+  vec3 temp_length;
+  for (int i = 0; i < n; i++) {
+    temp_length.x = lengths[i];
+    temp_length.y = 0;
+    temp_length.z = 0;
+    mulMatrixVector(&(pi_vectors[i]), rotation_matrices[i], &temp_length);
+  }
+
+  //calculate all X_i's
+  for (int i = 0; i < n; i++) {
+    getHomogenized(transformation_matrices[i], rotation_matrices[i], lengths[i]);
+  }
+}
+
+void calculateRotations() {
+  //initialize rotations + setup stuff relevant to this assignment in particular
+  //replace the below with some arg passing
+  //these are default system params
+  int n = 4;
+  float lengths[n];
+  lengths[0] = 1;
+  lengths[1] = 2;
+  lengths[2] = 3;
+  lengths[3] = 4;
+
+  // array of rotations; size n
+  vec3* rotations;
   vec3 zero;
   zero.x = 0;
   zero.y = 0;
   zero.z = 0;
-  rotations = (vec3*) malloc(joint_count * sizeof(vec3));
-  for (int i = 0; i < joint_count; i++) {
+
+  rotations = (vec3*) malloc(n * sizeof(vec3));
+  for (int i = 0; i < n; i++) {
     set(&(rotations[i]), &zero);
   }
+
+  vec3 goal;
+  goal.x = 1;
+  goal.y = 2.5;
+  goal.z = 4;
+
+  //------below this line is all calculated from above stuff
+
+  //variable to hold all Rodriguez rotation matrices
+  float rotation_matrices[n][3][3];
+
+  //variable to hold all pi displacement vectors
+  vec3 pi_vectors[n];
+
+  //variable to hold all Xi transformation matrices
+  float transformation_matrices[n][4][4];
+
+  updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
+
   vec3 end_effector;
-  findEndEffector(&end_effector, rotations, lengths, joint_count);
-  while(!reachedGoal(&end_effector, &goal, lengths, joint_count, epsilon)) {
-    updateJoint(&end_effector, joint_count);
-    //save points from updateJoint to allpoints
+  findEndEffector(&end_effector, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
+  cout << "initial" << endl;
+  visualizeVector(&end_effector);
+
+  while(!reachedGoal(&end_effector, &goal, lengths, n, epsilon)) {
+    updateJoint(rotations, &end_effector, &goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
+    updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
+    //save points from updateCalculations to allpoints
     
-    
-    findEndEffector(&end_effector, rotations, lengths, joint_count);
+    findEndEffector(&end_effector, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
   }
 }
 
@@ -722,32 +796,7 @@ bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float e
   return dist < epsilon || end_effector_dist >= radius - epsilon;
 }
 
-void findEndEffector(vec3* end_effector, vec3 rotations[], float lengths[], int n) { 
-  //variable to hold all Rodriguez rotation matrices
-  float rotation_matrices[n][3][3];
-
-  //variable to hold all Xi transformation matrices
-  float transformation_matrices[n][4][4];
-
-  //calculate all R_i matrices
-  for (int i = 0; i < n; i++) {
-    calculateRi(rotation_matrices[i], &(rotations[i]));
-  }
-
-  //calculate pn and hold it separately
-  vec3 pn;
-  vec3 temp_length;
-  temp_length.x = lengths[n - 1];
-  temp_length.y = 0;
-  temp_length.z = 0;
-
-  mulMatrixVector(&pn, rotation_matrices[n - 1], &temp_length);
-
-  //calculate all X_i's
-  for (int i = 0; i < n; i++) {
-    getHomogenized(transformation_matrices[i], rotation_matrices[i], lengths[i]);
-  }
-  
+void findEndEffector(vec3* end_effector, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) { 
   float x_n_to_zero[4][4];
   //location of end effector given by X_n->0 * p_n
   setIdentity4(x_n_to_zero);
@@ -755,7 +804,7 @@ void findEndEffector(vec3* end_effector, vec3 rotations[], float lengths[], int 
     mulMatrix4(x_n_to_zero, x_n_to_zero, transformation_matrices[k]);
   }
   // X_n->i * p_n
-  applyTransform(end_effector, x_n_to_zero, &pn);
+  applyTransform(end_effector, x_n_to_zero, pn);
 }
 
 //calculates the rotation matrix 3x3 from an exponential map vector
@@ -804,40 +853,14 @@ void calculateRi(float dest[][3], vec3* rotation) {
   addMatrix(dest, dest, temp);
 }
 
-float** calculateJacobian(vec3 rotations[], float lengths[], int n) {
+float** calculateJacobian(float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) {
   //what we'll return
   float** jac = (float**)malloc(sizeof(float*) * 3);
   for (int i = 0; i < 3; i++) {
     jac[i] = (float*)malloc(sizeof(float)*3*n);
   }
-
   //temp J_i var used to hold part of Jacobian at each part
   float ji[3][3];
-
-  //variable to hold all Rodriguez rotation matrices
-  float rotation_matrices[n][3][3];
-
-  //variable to hold all Xi transformation matrices
-  float transformation_matrices[n][4][4];
-
-  //calculate all R_i matrices
-  for (int i = 0; i < n; i++) {
-    calculateRi(rotation_matrices[i], &(rotations[i]));
-  }
-
-  //calculate pn and hold it separately
-  vec3 pn;
-  vec3 temp_length;
-  temp_length.x = lengths[n - 1];
-  temp_length.y = 0;
-  temp_length.z = 0;
-
-  mulMatrixVector(&pn, rotation_matrices[n - 1], &temp_length);
-
-  //calculate all X_i's
-  for (int i = 0; i < n; i++) {
-    getHomogenized(transformation_matrices[i], rotation_matrices[i], lengths[i]);
-  }
   
   float r_i_to_zero[3][3];
   float x_n_to_i[4][4];
@@ -856,7 +879,7 @@ float** calculateJacobian(vec3 rotations[], float lengths[], int n) {
       mulMatrix4(x_n_to_i, x_n_to_i, transformation_matrices[k]);
     }
     // X_n->i * p_n
-    applyTransform(&crossMeAndYouDie, x_n_to_i, &pn);
+    applyTransform(&crossMeAndYouDie, x_n_to_i, pn);
 
     // cross[ X_n->i * p_n ]
     crossProductMatrix(cpMatrix, &crossMeAndYouDie);
