@@ -557,6 +557,7 @@ float** penroseInverse() {
 }
 
 void finddr(float** pseudo_inverse, vec3* vec, int n) {
+  dr_lst.clear();
   float val;
   for(int i = 0; i < n; i++) {
     val = 0;
