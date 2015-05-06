@@ -87,6 +87,8 @@ int joint_count = 4;
 
 int frame_count = 1000;
 
+float epsilon = 1.0f;
+
 // array of rotations; size joint_count
 vec3* rotations;
 
@@ -558,11 +560,23 @@ float** penroseInverse() {
 
 void calculateRotations() {
   //initialize rotations + setup stuff relevant to this assignemtn in particular
-
-
-  //while loop...
-    //updateJoint()
+  vec3 zero;
+  zero.x = 0;
+  zero.y = 0;
+  zero.z = 0;
+  rotations = (vec3*) malloc(joint_count* sizeof(vec3));
+  for (int i = 0; i < joint_count; i++) {
+    set(rotations[i], &zero);
+  }
+  vec3 end_effector;
+  findEndEffector(&end_effector, rotations, lengths, joint_count);
+  while(!reachedGoal(&end_effector, &goal, lengths, joint_count, epsilon)) {
+    updateJoint();
     //save points from updateJoint to allpoints
+    
+    
+    findEndEffector(&end_effector, rotations, lengths, joint_count);
+  }
 }
 
 //one iteration of the joint algorithm
@@ -571,6 +585,57 @@ void updateJoint() {
   //find jacobian
   //find dr
   //update rotations + return rotations
+}
+
+bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon) {
+  vec3 temp;
+  subtract(&temp, end_effector, goal);
+  float dist = magnitude(&temp);
+  
+  // check to see if the end_effector is stretched out as far as it can go
+  // i.e. the goal is too far away to reach
+  float end_effector_dist = magnitude(end_effector);
+  float radius = 0.0f;
+  for(int i = 0; i < n; i++) {
+    radius += lengths[i];
+  }
+  return dist < epsilon || end_effector_dist >= radius - epsilon;
+}
+
+void findEndEffector(vec3* end_effector, vec3* rotations[], float lengths[], int n){ 
+  //variable to hold all Rodriguez rotation matrices
+  float rotation_matrices[n][3][3];
+
+  //variable to hold all Xi transformation matrices
+  float transformation_matrices[n][4][4];
+
+  //calculate all R_i matrices
+  for (int i = 0; i < n; i++) {
+    calculateRi(rotation_matrices[i], rotations[i]);
+  }
+
+  //calculate pn and hold it separately
+  vec3 pn;
+  vec3 temp_length;
+  temp_length.x = lengths[n - 1];
+  temp_length.y = 0;
+  temp_length.z = 0;
+
+  mulMatrixVector(&pn, rotation_matrices[n - 1], &temp_length);
+
+  //calculate all X_i's
+  for (int i = 0; i < n; i++) {
+    getHomogenized(transformation_matrices[i], rotation_matrices[i], lengths[i]);
+  }
+  
+  float x_n_to_zero[4][4];
+  //location of end effector given by X_n->0 * p_n
+  setIdentity4(x_n_to_zero);
+  for (int k = n - 2; k >= 0; k--) {
+    mulMatrix4(x_n_to_zero, x_n_to_zero, transformation_matrices[k]);
+  }
+  // X_n->i * p_n
+  applyTransform(end_effector, x_n_to_zero, &pn);
 }
 
 //calculates the rotation matrix 3x3 from an exponential map vector
