@@ -560,7 +560,14 @@ void testFunction() {
   free(jac);
 
 
-  MatrixXf m = MatrixXf::Random(3,2);
+  //MatrixXf m = MatrixXf::Random(3,2);
+  MatrixXf m(3,2);
+  m(0,0) = -0.99;
+  m(0,1) = -0.08;
+  m(1,0) = -0.73;
+  m(1,1) = 0.06;
+  m(2,0) = 0.51;
+  m(2,1) = -0.56;
   cout << "Here is the matrix m:" << endl << m << endl;
   JacobiSVD<MatrixXf> svd(m, ComputeThinU | ComputeThinV);
   cout << "Its singular values are:" << endl << svd.singularValues() << endl;
@@ -570,12 +577,62 @@ void testFunction() {
   cout << "Now consider this rhs vector:" << endl << rhs << endl;
   cout << "A least-squares solution of m*x = rhs is:" << endl << svd.solve(rhs) << endl;
 
+  cout << "Now testing pseudoinverse" << endl;
+
+  double  pinvtoler=1.e-6; // choose your tolerance wisely!
+  typename JacobiSVD<MatrixXf>::SingularValuesType sigma,sigma_inv;
+  sigma = svd.singularValues();
+  sigma_inv.resizeLike(sigma);
+  for ( int i=0; i<m.cols(); ++i) {
+    if ( sigma(i) > pinvtoler )
+      sigma_inv(i)=1.0/sigma(i);
+    else sigma_inv(i)=0;
+  }
+  MatrixXf pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
+  cout << "The pseudoinverse is " << endl << pinvmat << endl;
+
 
   cout << "end tests\n";
 }
 
-float** penroseInverse(float** jac) {
+float** penroseInverse(float** jac, int n) {
   //return pernose inverse
+
+  //first convert to MatrixXf form
+  MatrixXf m(3, 3*n);
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3*n; y++) {
+      m(x, y) = jac[x][y];
+    }
+  }
+  
+  //find U, Sigma, V (JAC = U Sigma V*)
+  JacobiSVD<MatrixXf> svd(m, ComputeThinU | ComputeThinV);
+  //now find (Jac^-1 = V Sigma^-1 U*)
+  double  pinvtoler=1.e-6; // choose your tolerance wisely!
+  typename JacobiSVD<MatrixXf>::SingularValuesType sigma,sigma_inv;
+  sigma = svd.singularValues();
+  sigma_inv.resizeLike(sigma);
+  for ( int i=0; i<m.cols(); ++i) {
+    if ( sigma(i) > pinvtoler )
+      sigma_inv(i)=1.0/sigma(i);
+    else sigma_inv(i)=0;
+  }
+  MatrixXf pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
+
+  //now convert back into a non-Eigen-library form
+  float** jacInverse = (float**)malloc(sizeof(float*) * 3 * n);
+  for (int i = 0; i < 3 * n; i++) {
+    jacInverse[i] = (float*)malloc(sizeof(float)*3);
+  }
+
+  for (int x = 0; x < 3 * n; x++) {
+    for (int y = 0; y < 3; y++) {
+      jacInverse[x][y] = pinvmat(x, y);
+    }
+  }
+
+  return jacInverse;
 }
 
 void finddr(float** pseudo_inverse, vec3* vec, int n) {
@@ -596,11 +653,11 @@ void finddr(float** pseudo_inverse, vec3* vec, int n) {
 
 //one iteration of the joint algorithm
 //should be called by my myDisplay method
-void updateJoint(vec3* end_effector) {
+void updateJoint(vec3* end_effector, int n) {
   //find jacobian
   float** jac = calculateJacobian(rotations, lengths, joint_count);
   //get pseudoinverse
-  float** pseudo_inverse = penroseInverse(jac);
+  float** pseudo_inverse = penroseInverse(jac, n);
   
   // lambda * (g - pe)
   vec3 temp;
@@ -642,7 +699,7 @@ void calculateRotations(int joint_count, float lengths[]) {
   vec3 end_effector;
   findEndEffector(&end_effector, rotations, lengths, joint_count);
   while(!reachedGoal(&end_effector, &goal, lengths, joint_count, epsilon)) {
-    updateJoint(&end_effector);
+    updateJoint(&end_effector, joint_count);
     //save points from updateJoint to allpoints
     
     
