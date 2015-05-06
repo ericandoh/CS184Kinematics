@@ -28,6 +28,14 @@
 #include <vector>
 #include <limits>
 
+#include <Eigen/SVD>
+
+using Eigen::Vector3f;
+using Eigen::MatrixXf;
+using Eigen::JacobiSVD;
+using Eigen::ComputeThinU;
+using Eigen::ComputeThinV;
+
 #define PI 3.14159265  // Should be used from mathlib
 
 inline float sqr(float x) { return x*x; }
@@ -109,7 +117,13 @@ std::vector<float> dr_lst;
 
 void myDisplay();
 
-float** calculateJacobian(vec3* rotations[], float lengths[], int n);
+void findEndEffector(vec3* end_effector, vec3 rotations[], float lengths[], int n);
+
+bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon);
+
+float** calculateJacobian(vec3 rotations[], float lengths[], int n);
+
+void calculateRi(float dest[][3], vec3* rotation);
 
 //****************************************************
 // Simple init function
@@ -507,7 +521,6 @@ void testFunction() {
 
   //jacobian tests
   int n = 4;
-  vec3* rotations[n];
   vec3 rotationSource[n];
   float lengths[n];
 
@@ -526,14 +539,13 @@ void testFunction() {
   rotationSource[3].x = 0;
   rotationSource[3].y = 0;
   rotationSource[3].z = 0;
-  for (int i = 0; i < n; i++)
-    rotations[i] = &(rotationSource[i]);
+
   lengths[0] = 1;
   lengths[1] = 2;
   lengths[2] = 3;
   lengths[3] = 4;
 
-  float** jac = calculateJacobian(rotations, lengths, n);
+  float** jac = calculateJacobian(rotationSource, lengths, n);
 
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3 * n; y++) {
@@ -548,11 +560,21 @@ void testFunction() {
   free(jac);
 
 
+  MatrixXf m = MatrixXf::Random(3,2);
+  cout << "Here is the matrix m:" << endl << m << endl;
+  JacobiSVD<MatrixXf> svd(m, ComputeThinU | ComputeThinV);
+  cout << "Its singular values are:" << endl << svd.singularValues() << endl;
+  cout << "Its left singular vectors are the columns of the thin U matrix:" << endl << svd.matrixU() << endl;
+  cout << "Its right singular vectors are the columns of the thin V matrix:" << endl << svd.matrixV() << endl;
+  Vector3f rhs(1, 0, 0);
+  cout << "Now consider this rhs vector:" << endl << rhs << endl;
+  cout << "A least-squares solution of m*x = rhs is:" << endl << svd.solve(rhs) << endl;
+
 
   cout << "end tests\n";
 }
 
-float** penroseInverse() {
+float** penroseInverse(float** jac) {
   //return pernose inverse
 }
 
@@ -572,39 +594,18 @@ void finddr(float** pseudo_inverse, vec3* vec, int n) {
 // Meat of the assignment
 //****************************************************
 
-void calculateRotations() {
-  //initialize rotations + setup stuff relevant to this assignemtn in particular
-  vec3 zero;
-  zero.x = 0;
-  zero.y = 0;
-  zero.z = 0;
-  rotations = (vec3*) malloc(joint_count* sizeof(vec3));
-  for (int i = 0; i < joint_count; i++) {
-    set(rotations[i], &zero);
-  }
-  vec3 end_effector;
-  findEndEffector(&end_effector, rotations, lengths, joint_count);
-  while(!reachedGoal(&end_effector, &goal, lengths, joint_count, epsilon)) {
-    updateJoint(&end_effector);
-    //save points from updateJoint to allpoints
-    
-    
-    findEndEffector(&end_effector, rotations, lengths, joint_count);
-  }
-}
-
 //one iteration of the joint algorithm
 //should be called by my myDisplay method
 void updateJoint(vec3* end_effector) {
   //find jacobian
   float** jac = calculateJacobian(rotations, lengths, joint_count);
   //get pseudoinverse
-  float** pseudo_inverse = pernoseInverse(jac);
+  float** pseudo_inverse = penroseInverse(jac);
   
   // lambda * (g - pe)
   vec3 temp;
-  subtract(&temp, &goal, &end_effector);
-  scale(&temp, lambda);
+  subtract(&temp, &goal, end_effector);
+  scale(&temp, &temp, lambda);
   
   //find dr
   //dr is stored in an arraylist called dr_lst
@@ -627,6 +628,28 @@ void updateJoint(vec3* end_effector) {
   //render in openGL
 }
 
+
+void calculateRotations(int joint_count, float lengths[]) {
+  //initialize rotations + setup stuff relevant to this assignemtn in particular
+  vec3 zero;
+  zero.x = 0;
+  zero.y = 0;
+  zero.z = 0;
+  rotations = (vec3*) malloc(joint_count * sizeof(vec3));
+  for (int i = 0; i < joint_count; i++) {
+    set(&(rotations[i]), &zero);
+  }
+  vec3 end_effector;
+  findEndEffector(&end_effector, rotations, lengths, joint_count);
+  while(!reachedGoal(&end_effector, &goal, lengths, joint_count, epsilon)) {
+    updateJoint(&end_effector);
+    //save points from updateJoint to allpoints
+    
+    
+    findEndEffector(&end_effector, rotations, lengths, joint_count);
+  }
+}
+
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon) {
   vec3 temp;
   subtract(&temp, end_effector, goal);
@@ -642,7 +665,7 @@ bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float e
   return dist < epsilon || end_effector_dist >= radius - epsilon;
 }
 
-void findEndEffector(vec3* end_effector, vec3* rotations[], float lengths[], int n){ 
+void findEndEffector(vec3* end_effector, vec3 rotations[], float lengths[], int n) { 
   //variable to hold all Rodriguez rotation matrices
   float rotation_matrices[n][3][3];
 
@@ -651,7 +674,7 @@ void findEndEffector(vec3* end_effector, vec3* rotations[], float lengths[], int
 
   //calculate all R_i matrices
   for (int i = 0; i < n; i++) {
-    calculateRi(rotation_matrices[i], rotations[i]);
+    calculateRi(rotation_matrices[i], &(rotations[i]));
   }
 
   //calculate pn and hold it separately
@@ -724,7 +747,7 @@ void calculateRi(float dest[][3], vec3* rotation) {
   addMatrix(dest, dest, temp);
 }
 
-float** calculateJacobian(vec3* rotations[], float lengths[], int n) {
+float** calculateJacobian(vec3 rotations[], float lengths[], int n) {
   //what we'll return
   float** jac = (float**)malloc(sizeof(float*) * 3);
   for (int i = 0; i < 3; i++) {
@@ -742,7 +765,7 @@ float** calculateJacobian(vec3* rotations[], float lengths[], int n) {
 
   //calculate all R_i matrices
   for (int i = 0; i < n; i++) {
-    calculateRi(rotation_matrices[i], rotations[i]);
+    calculateRi(rotation_matrices[i], &(rotations[i]));
   }
 
   //calculate pn and hold it separately
