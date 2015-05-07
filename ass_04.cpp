@@ -71,19 +71,11 @@ class Viewport {
     int w, h; // width and height
 };
 
-
 //in classes
 struct vec3 {
   float x, y, z;
 };
 typedef struct vec3 vec3;
-
-struct color {
-  float r, g, b;
-};
-typedef struct color color;
-
-
 
 //****************************************************
 // Global Variables
@@ -101,9 +93,9 @@ float current_increment = 0.0f;
 
 float* lengths;
 
-int joint_count;
+const int joint_count = 4;
 
-int goal_count;
+const int goal_count = 10;
 
 bool paused = false;
 
@@ -209,56 +201,6 @@ void myKeyPressed(unsigned char key, int x, int y) {
   //myDisplay();
 }
 
-/*
-void mySpecialInput(int key, int x, int y) {
-  int mod = glutGetModifiers();
-  if(mod == GLUT_ACTIVE_SHIFT) {
-    switch(key) {
-      case GLUT_KEY_UP:
-        yshift -= 1.0f;
-        break;
-      case GLUT_KEY_DOWN:
-        yshift += 1.0f;
-        break;
-      case GLUT_KEY_LEFT:
-        xshift += 1.0f;
-        break;
-      case GLUT_KEY_RIGHT:
-        xshift -= 1.0f;
-        break;
-    }
-  } else {
-    switch(key) {
-      case GLUT_KEY_UP:
-        z_angle = fmod((z_angle + angle_change), 2*PI);
-        break;
-      case GLUT_KEY_DOWN:
-        z_angle = fmod((z_angle - angle_change), 2*PI);
-        break;
-      case GLUT_KEY_LEFT:
-        angle = fmod((angle + angle_change), 2*PI);
-        break;
-      case GLUT_KEY_RIGHT:
-        angle = fmod((angle - angle_change), 2*PI);
-        break;
-    }
-  }
-  myDisplay();
-}*/
-
-//****************************************************
-// A routine to set a pixel by drawing a GL point.  This is not a
-// general purpose routine as it assumes a lot of stuff specific to
-// this example.
-//****************************************************
-
-void setPixel(int x, int y, GLfloat r, GLfloat g, GLfloat b) {
-  glColor3f(r, g, b);
-  glVertex2f(x + 0.5, y + 0.5);   // The 0.5 is to target pixel
-  // centers 
-  // Note: Need to check for gap
-  // bug on inst machines.
-}
 
 //****************************************************
 // Vector Manipulation Methods
@@ -489,165 +431,6 @@ void visualize(float matrix[][3]) {
   }
 }
 
-void testFunction() {
-  cout << "begin tests\n";
-
-  //45 degree rotation around z axis (up)
-  float dest[3][3];
-  vec3 temp3;
-  temp3.x = 0;
-  temp3.y = PI / 4.0f;
-  temp3.z = 0;
-  calculateRi(dest, &temp3);
-  cout << "our matrix" << endl;
-  visualize(dest);
-
-
-  vec3 temp4;
-  temp4.x = 0;
-  temp4.y = 1;
-  temp4.z = 0;
-  cout << "tranposed\n";
-  mulMatrixVector(&temp4, dest, &temp4);
-  visualizeVector(&temp4);
-
-
-  /*
-  //matrix tests
-  float temp[3][3];
-  setIdentity(temp);
-  visualize(temp);
-
-  scaleMatrix(temp, temp, 3);
-  temp[0][2] = 4.0f;
-  visualize(temp);
-
-  float temp2[3][3];
-  setIdentity(temp2);
-  temp2[2][0] = 2.0f;
-  visualize(temp2);
-
-  mulMatrix3(temp2, temp, temp2);
-  visualize(temp2);
-
-  vec3 temp3;
-  temp3.x = 1;
-  temp3.y = 2;
-  temp3.z = 3;
-
-  setIdentity(temp);
-  temp[0][0] = 2;
-  temp[1][0] = 3;
-  temp[0][2] = 4;
-  visualize(temp);
-
-  mulMatrixVector(&temp3, temp, &temp3);
-  cout << temp3.x << "," << temp3.y << "," << temp3.z << "\n";
-  */
-
-  //jacobian tests
-  int n = 4;
-  vec3 rotations[n];
-  float lengths[n];
-
-  rotations[0].x = 0;
-  rotations[0].y = 0;
-  rotations[0].z = 0;
-
-  rotations[1].x = 0;
-  rotations[1].y = 0;
-  rotations[1].z = 0;
-
-  rotations[2].x = 0;
-  rotations[2].y = 0;
-  rotations[2].z = 0;
-
-  rotations[3].x = 0;
-  rotations[3].y = 0;
-  rotations[3].z = 0;
-
-  lengths[0] = 1;
-  lengths[1] = 2;
-  lengths[2] = 3;
-  lengths[3] = 4;
-
-  //variable to hold all Rodriguez rotation matrices
-  float rotation_matrices[n][3][3];
-
-  //variable to hold all pi displacement vectors
-  vec3 pi_vectors[n];
-
-  //variable to hold all Xi transformation matrices
-  float transformation_matrices[n][4][4];
-
-  updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
-
-  for (int x = 0; x < 4; x++) {
-    for (int y = 0; y < 4; y++) {
-      cout << transformation_matrices[1][x][y] << ",";
-    }
-    cout << "\n";
-  }
-  cout << "new" << endl;
-
-  //what we'll return
-  float** jac;
-  jac = new float*[3];
-  for (int i = 0; i < 3; i++) {
-    jac[i] = new float[3*n];
-  }
-
-  calculateJacobian(jac, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
-
-  for (int x = 0; x < 3; x++) {
-    for (int y = 0; y < 3 * n; y++) {
-      cout << jac[x][y] << ",";
-    }
-    cout << "\n";
-  }
-
-  for (int i = 0; i < 3; i++) {
-    delete[] jac[i];
-  }
-  delete[] jac;
-
-  /*
-  //pseudoinverse/SVD test
-  //MatrixXf m = MatrixXf::Random(3,2);
-  MatrixXf m(3,2);
-  m(0,0) = -0.99;
-  m(0,1) = -0.08;
-  m(1,0) = -0.73;
-  m(1,1) = 0.06;
-  m(2,0) = 0.51;
-  m(2,1) = -0.56;
-  cout << "Here is the matrix m:" << endl << m << endl;
-  JacobiSVD<MatrixXf> svd(m, ComputeThinU | ComputeThinV);
-  cout << "Its singular values are:" << endl << svd.singularValues() << endl;
-  cout << "Its left singular vectors are the columns of the thin U matrix:" << endl << svd.matrixU() << endl;
-  cout << "Its right singular vectors are the columns of the thin V matrix:" << endl << svd.matrixV() << endl;
-  Vector3f rhs(1, 0, 0);
-  cout << "Now consider this rhs vector:" << endl << rhs << endl;
-  cout << "A least-squares solution of m*x = rhs is:" << endl << svd.solve(rhs) << endl;
-
-  cout << "Now testing pseudoinverse" << endl;
-
-  double  pinvtoler=1.e-6; // choose your tolerance wisely!
-  typename JacobiSVD<MatrixXf>::SingularValuesType sigma,sigma_inv;
-  sigma = svd.singularValues();
-  sigma_inv.resizeLike(sigma);
-  for ( int i=0; i<m.cols(); ++i) {
-    if ( sigma(i) > pinvtoler )
-      sigma_inv(i)=1.0/sigma(i);
-    else sigma_inv(i)=0;
-  }
-  MatrixXf pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
-  cout << "The pseudoinverse is " << endl << pinvmat << endl;
-  */
-
-  cout << "end tests\n";
-}
-
 void solveForDP(float dr[], float** jac, vec3* dp, int n) {
   
   //first convert to MatrixXd form
@@ -670,49 +453,10 @@ void solveForDP(float dr[], float** jac, vec3* dp, int n) {
   //cout << "jacobian:" << endl << jacobian << endl;
   //cout << "answer:" << endl << dr_mat << endl;
 
-  /*
-  //now find (Jac^-1 = V Sigma^-1 U*)
-  double  pinvtoler=1.e-6; // choose your tolerance wisely!
-  typename JacobiSVD<Eigen::MatrixXd>::SingularValuesType sigma,sigma_inv;
-  sigma = svd.singularValues();
-  sigma_inv.resizeLike(sigma);
-  for ( int i=0; i<sigma.size(); ++i) {
-    if ( sigma(i) > pinvtoler )
-      sigma_inv(i)=1.0/sigma(i);
-    else sigma_inv(i)=0;
-  }
-  Eigen::MatrixXd pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
-
-  cout << "inverse:" << endl << pinvmat << endl;
-
-  //now convert back into a non-Eigen-library form
-  float** jacInverse = (float**)malloc(sizeof(float*) * 3 * n);
-  for (int i = 0; i < 3 * n; i++) {
-    jacInverse[i] = (float*)malloc(sizeof(float)*3);
-  }
-
-  for (int x = 0; x < 3 * n; x++) {
-    for (int y = 0; y < 3; y++) {
-      jacInverse[x][y] = pinvmat(x, y);
-    }
-  }*/
   for (int i = 0; i < 3 * n; i++) {
     dr[i] = dr_mat(i, 0);
   }
 }
-
-/*
-void finddr(float** pseudo_inverse, vec3* vec, int n) {
-  dr_lst.clear();
-  float val;
-  for(int i = 0; i < n; i++) {
-    val = 0;
-    val += pseudo_inverse[i][0] * vec->x;
-    val += pseudo_inverse[i][1] * vec->y;
-    val += pseudo_inverse[i][2] * vec->z;
-    dr_lst.push_back(val);
-  }
-}*/
 
 //****************************************************
 // Meat of the assignment
@@ -738,7 +482,7 @@ void updateJoint(vec3 rotations[], vec3* end_effector, vec3* goal, float rotatio
   scale(&dp, &dp, lambda);
 
   //we will solve for this
-  float dr[3*n];
+  float dr[3*joint_count];
 
   //get pseudoinverse
   solveForDP(dr, jac, &dp, n); 
@@ -802,16 +546,15 @@ void initializeParameters() {
   //initialize rotations + setup stuff relevant to this assignment in particular
   //replace the below with some arg passing
   //these are default system params
-  int n = 4;
-  joint_count = 4;
-  lengths = (float*)malloc(sizeof(float) * n);
+  const int n = joint_count;
+  lengths = (float*)malloc(sizeof(float) * joint_count);
   lengths[0] = 1;
   lengths[1] = 2;
-  lengths[2] = 3;
-  lengths[3] = 4;
+  lengths[2] = 2;
+  lengths[3] = 1;
 
   // array of rotations; size n
-  vec3 rotations[n];
+  vec3 rotations[joint_count];
   vec3 zero;
   zero.x = 0;
   zero.y = 0;
@@ -821,13 +564,11 @@ void initializeParameters() {
     set(&(rotations[i]), &zero);
   }
 
-  goal_count = 4;
-
   vec3 goals[goal_count];
-  goals[0] = {2, 2, 1};
-  goals[1] = {0, 0, 0};
-  goals[2] = {-1, 3, 4};
-  goals[3] = {1, 0, 0};
+  for (int i = 0; i < goal_count; i++) {
+	  goals[i] = {7*sin(2*i*PI/goal_count), 4*cos(2*i*PI/goal_count), 0};
+  }
+
 
   rotation_frames.clear();
 
@@ -858,13 +599,13 @@ void calculateRotations(vec3 rotations[], vec3* goal, int n) {
   //------below this line is all calculated from above stuff
 
   //variable to hold all Rodriguez rotation matrices
-  float rotation_matrices[n][3][3];
+  float rotation_matrices[joint_count][3][3];
 
   //variable to hold all pi displacement vectors
-  vec3 pi_vectors[n];
+  vec3 pi_vectors[joint_count];
 
   //variable to hold all Xi transformation matrices
-  float transformation_matrices[n][4][4];
+  float transformation_matrices[joint_count][4][4];
 
   updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
 
@@ -903,18 +644,18 @@ bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float e
   }
   float goalreach = magnitude(goal);
 
-  return dist < epsilon || maxreach < goalreach - epsilon;
+  return dist < epsilon;
 }
 
 void findRealCoordinates(vec3 positions[], vec3 rotations[], float lengths[], int n) {
   //used in real time to calculate joint position based on current rotations
-  float rotation_matrices[n][3][3];
+  float rotation_matrices[joint_count][3][3];
 
   //variable to hold all pi displacement vectors
-  vec3 pi_vectors[n];
+  vec3 pi_vectors[joint_count];
 
   //variable to hold all Xi transformation matrices
-  float transformation_matrices[n][4][4];
+  float transformation_matrices[joint_count][4][4];
 
   updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
 
@@ -1032,37 +773,11 @@ void calculateJacobian(float** jac, float rotation_matrices[][3][3], float trans
 }
 
 
-
-
-
-
-
-//****************************************************
-// Draw a random ass triangle 
-//****************************************************
-
-/*
-void drawTriangle(triangle *triangle) {
-  glBegin(GL_TRIANGLES);
-
-  //glColor3f(triangle->color->r, triangle->color->g, triangle->color->b);
-
-  glNormal3f( triangle->a.norm.x, triangle->a.norm.y, triangle->a.norm.z );
-  glVertex3f( triangle->a.pos.x, triangle->a.pos.y, triangle->a.pos.z );
-  glNormal3f( triangle->b.norm.x, triangle->b.norm.y, triangle->b.norm.z );
-  glVertex3f( triangle->b.pos.x, triangle->b.pos.y, triangle->b.pos.z );
-  glNormal3f( triangle->c.norm.x, triangle->c.norm.y, triangle->c.norm.z );
-  glVertex3f( triangle->c.pos.x, triangle->c.pos.y, triangle->c.pos.z );
-
-  glEnd();
-}*/
-
 //****************************************************
 // function that does the actual drawing of stuff
 //***************************************************
 
 void drawSphere(vec3* pos) {
-  //drawTriangle(*triangle)
   glPushMatrix();
       glTranslated(pos->x,pos->y,pos->z);
       glutSolidSphere(0.1,30,30); //radius,slices,stacks
@@ -1197,9 +912,9 @@ void myDisplay() {
   /*float xpos = vdistance * cos(angle) * cos(z_angle);
   float ypos = vdistance * sin(angle) * cos(z_angle);
   float zpos = vdistance * sin(z_angle);*/
-  float xpos = 7;
-  float ypos = 5;
-  float zpos = 6;
+  float xpos = 10;
+  float ypos = 10;
+  float zpos = 10;
   
   gluLookAt(xpos, ypos, zpos,     // eye position
             0.0f, 0.0f, 0.0f,     // where to look at
