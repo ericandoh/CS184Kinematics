@@ -31,7 +31,7 @@
 #include <Eigen/SVD>
 
 using Eigen::Vector3f;
-using Eigen::MatrixXf;
+//using Eigen::MatrixXf;
 using Eigen::JacobiSVD;
 using Eigen::ComputeThinU;
 using Eigen::ComputeThinV;
@@ -93,9 +93,6 @@ Viewport  viewport;
 
 int frame_count = 1000;
 
-float epsilon = 1.0f;
-float lambda = 0.1f;
-
 //all points
 std::vector<vec3> allpoints;
 
@@ -110,7 +107,7 @@ void findEndEffector(vec3* end_effector, float rotation_matrices[][3][3], float 
 
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon);
 
-float** calculateJacobian(float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n);
+void calculateJacobian(float** jac, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n);
 
 void calculateRi(float dest[][3], vec3* rotation);
 
@@ -480,6 +477,26 @@ void visualize(float matrix[][3]) {
 void testFunction() {
   cout << "begin tests\n";
 
+  //45 degree rotation around z axis (up)
+  float dest[3][3];
+  vec3 temp3;
+  temp3.x = 0;
+  temp3.y = PI / 4.0f;
+  temp3.z = 0;
+  calculateRi(dest, &temp3);
+  cout << "our matrix" << endl;
+  visualize(dest);
+
+
+  vec3 temp4;
+  temp4.x = 0;
+  temp4.y = 1;
+  temp4.z = 0;
+  cout << "tranposed\n";
+  mulMatrixVector(&temp4, dest, &temp4);
+  visualizeVector(&temp4);
+
+
   /*
   //matrix tests
   float temp[3][3];
@@ -558,7 +575,14 @@ void testFunction() {
   }
   cout << "new" << endl;
 
-  float** jac = calculateJacobian(rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
+  //what we'll return
+  float** jac;
+  jac = new float*[3];
+  for (int i = 0; i < 3; i++) {
+    jac[i] = new float[3*n];
+  }
+
+  calculateJacobian(jac, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
 
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3 * n; y++) {
@@ -567,12 +591,13 @@ void testFunction() {
     cout << "\n";
   }
 
-  for (int x = 0; x < 3; x++){
-   free(jac[x]);
+  for (int i = 0; i < 3; i++) {
+    delete[] jac[i];
   }
-  free(jac);
+  delete[] jac;
 
-
+  /*
+  //pseudoinverse/SVD test
   //MatrixXf m = MatrixXf::Random(3,2);
   MatrixXf m(3,2);
   m(0,0) = -0.99;
@@ -603,35 +628,47 @@ void testFunction() {
   }
   MatrixXf pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
   cout << "The pseudoinverse is " << endl << pinvmat << endl;
-
+  */
 
   cout << "end tests\n";
 }
 
-float** penroseInverse(float** jac, int n) {
-  //return pernose inverse
-
-  //first convert to MatrixXf form
-  MatrixXf m(3, 3*n);
+void solveForDP(float dr[], float** jac, vec3* dp, int n) {
+  
+  //first convert to MatrixXd form
+  Eigen::MatrixXd jacobian(3, 3*n);
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3*n; y++) {
-      m(x, y) = jac[x][y];
+      jacobian(x, y) = jac[x][y];
     }
   }
-  
+
+  Eigen::MatrixXd dp_mat(3, 1);
+  dp_mat(0, 0) = dp->x;
+  dp_mat(1, 0) = dp->y;
+  dp_mat(2, 0) = dp->z;
+
   //find U, Sigma, V (JAC = U Sigma V*)
-  JacobiSVD<MatrixXf> svd(m, ComputeThinU | ComputeThinV);
+  Eigen::MatrixXd dr_mat = jacobian.jacobiSvd(Eigen::ComputeThinU|Eigen::ComputeThinV).solve(dp_mat);
+  //JacobiSVD<Eigen::MatrixXd> svd(m, ComputeThinU | ComputeThinV);
+
+  //cout << "jacobian:" << endl << jacobian << endl;
+  //cout << "answer:" << endl << dr_mat << endl;
+
+  /*
   //now find (Jac^-1 = V Sigma^-1 U*)
   double  pinvtoler=1.e-6; // choose your tolerance wisely!
-  typename JacobiSVD<MatrixXf>::SingularValuesType sigma,sigma_inv;
+  typename JacobiSVD<Eigen::MatrixXd>::SingularValuesType sigma,sigma_inv;
   sigma = svd.singularValues();
   sigma_inv.resizeLike(sigma);
-  for ( int i=0; i<m.cols(); ++i) {
+  for ( int i=0; i<sigma.size(); ++i) {
     if ( sigma(i) > pinvtoler )
       sigma_inv(i)=1.0/sigma(i);
     else sigma_inv(i)=0;
   }
-  MatrixXf pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
+  Eigen::MatrixXd pinvmat= (svd.matrixV()*sigma_inv.asDiagonal()*svd.matrixU().transpose());
+
+  cout << "inverse:" << endl << pinvmat << endl;
 
   //now convert back into a non-Eigen-library form
   float** jacInverse = (float**)malloc(sizeof(float*) * 3 * n);
@@ -643,9 +680,10 @@ float** penroseInverse(float** jac, int n) {
     for (int y = 0; y < 3; y++) {
       jacInverse[x][y] = pinvmat(x, y);
     }
+  }*/
+  for (int i = 0; i < 3 * n; i++) {
+    dr[i] = dr_mat(i, 0);
   }
-
-  return jacInverse;
 }
 
 void finddr(float** pseudo_inverse, vec3* vec, int n) {
@@ -667,33 +705,50 @@ void finddr(float** pseudo_inverse, vec3* vec, int n) {
 //one iteration of the joint algorithm
 //should be called by my myDisplay method
 //updates rotations[]
-void updateJoint(vec3 rotations[], vec3* end_effector, vec3* goal, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) {
+void updateJoint(vec3 rotations[], vec3* end_effector, vec3* goal, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n, float lambda) {
   //find jacobian
-  float** jac = calculateJacobian(rotation_matrices, transformation_matrices, pn, n);
+
+  float** jac;
+  jac = new float*[3];
+  for (int i = 0; i < 3; i++) {
+    jac[i] = new float[3*n];
+  }
+
+  calculateJacobian(jac, rotation_matrices, transformation_matrices, pn, n);
+
+  // dp = lambda * (g - pe)
+  vec3 dp;
+  subtract(&dp, goal, end_effector);
+  scale(&dp, &dp, lambda);
+
+  //we will solve for this
+  float dr[3*n];
+
   //get pseudoinverse
-  float** pseudo_inverse = penroseInverse(jac, n);
+  solveForDP(dr, jac, &dp, n); 
   
-  // lambda * (g - pe)
-  vec3 temp;
-  subtract(&temp, goal, end_effector);
-  scale(&temp, &temp, lambda);
-  
+  /*
   //find dr
   //dr is stored in an arraylist called dr_lst
-  finddr(pseudo_inverse, &temp, n);
+  finddr(pseudo_inverse, &temp, n);*/
   
   //update rotations
-  for(int i = 0; i < dr_lst.size(); i++) {
+  for(int i = 0; i < 3*n; i++) {
     if(i % 3 == 0) {
-      rotations[i / 3].x += dr_lst.at(i);
+      rotations[i / 3].x += dr[i];
     }
     else if(i % 3 == 1) {
-      rotations[i / 3].y += dr_lst.at(i);
+      rotations[i / 3].y += dr[i];
     }
     else {
-      rotations[i / 3].z += dr_lst.at(i);
+      rotations[i / 3].z += dr[i];
     }
   }
+
+  for (int i = 0; i < 3; i++) {
+    delete[] jac[i];
+  }
+  delete[] jac;
   
   //find pi (the positions of each joint)
   //render in openGL
@@ -740,6 +795,9 @@ void calculateRotations() {
   // array of rotations; size n
   vec3* rotations;
   vec3 zero;
+  /*zero.x = 1.57f;
+  zero.y = 1.57f;
+  zero.z = 1.57f;*/
   zero.x = 0;
   zero.y = 0;
   zero.z = 0;
@@ -751,8 +809,13 @@ void calculateRotations() {
 
   vec3 goal;
   goal.x = 1;
-  goal.y = 2.5;
-  goal.z = 4;
+  goal.y = 1;
+  goal.z = 1;
+
+  float epsilon = 0.001f;
+  float lambda = 0.001f;
+
+  int max_iter = 7000;
 
   //------below this line is all calculated from above stuff
 
@@ -772,13 +835,22 @@ void calculateRotations() {
   cout << "initial" << endl;
   visualizeVector(&end_effector);
 
-  while(!reachedGoal(&end_effector, &goal, lengths, n, epsilon)) {
-    updateJoint(rotations, &end_effector, &goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
+  int iter_count = 0;
+  while(!reachedGoal(&end_effector, &goal, lengths, n, epsilon) && iter_count < max_iter) {
+    updateJoint(rotations, &end_effector, &goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n, lambda);
     updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
     //save points from updateCalculations to allpoints
     
     findEndEffector(&end_effector, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
+
+    //cout << "next" << endl;
+    //visualizeVector(&end_effector);
+
+    iter_count += 1;
   }
+  cout << "end" << endl;
+  visualizeVector(&end_effector);
+  cout << "iters " << iter_count << endl;
 }
 
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon) {
@@ -786,21 +858,21 @@ bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float e
   subtract(&temp, end_effector, goal);
   float dist = magnitude(&temp);
   
-  // check to see if the end_effector is stretched out as far as it can go
-  // i.e. the goal is too far away to reach
-  float end_effector_dist = magnitude(end_effector);
-  float radius = 0.0f;
+  //check to see if goal is too far
+  float maxreach = 0.0f;
   for(int i = 0; i < n; i++) {
-    radius += lengths[i];
+    maxreach += lengths[i];
   }
-  return dist < epsilon || end_effector_dist >= radius - epsilon;
+  float goalreach = magnitude(goal);
+
+  return dist < epsilon || maxreach < goalreach - epsilon;
 }
 
 void findEndEffector(vec3* end_effector, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) { 
   float x_n_to_zero[4][4];
   //location of end effector given by X_n->0 * p_n
   setIdentity4(x_n_to_zero);
-  for (int k = n - 2; k >= 0; k--) {
+  for (int k = 0; k < n-1; k++) {
     mulMatrix4(x_n_to_zero, x_n_to_zero, transformation_matrices[k]);
   }
   // X_n->i * p_n
@@ -853,12 +925,7 @@ void calculateRi(float dest[][3], vec3* rotation) {
   addMatrix(dest, dest, temp);
 }
 
-float** calculateJacobian(float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) {
-  //what we'll return
-  float** jac = (float**)malloc(sizeof(float*) * 3);
-  for (int i = 0; i < 3; i++) {
-    jac[i] = (float*)malloc(sizeof(float)*3*n);
-  }
+void calculateJacobian(float** jac, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) {
   //temp J_i var used to hold part of Jacobian at each part
   float ji[3][3];
   
@@ -875,7 +942,7 @@ float** calculateJacobian(float rotation_matrices[][3][3], float transformation_
     }
 
     setIdentity4(x_n_to_i);
-    for (int k = n - 2; k >= i; k--) {
+    for (int k = i; k < n-1; k++) {
       mulMatrix4(x_n_to_i, x_n_to_i, transformation_matrices[k]);
     }
     // X_n->i * p_n
@@ -897,7 +964,6 @@ float** calculateJacobian(float rotation_matrices[][3][3], float transformation_
       }
     }
   }
-  return jac;
 }
 
 
@@ -989,6 +1055,8 @@ int main(int argc, char *argv[]) {
   }*/
 
   //do processing here
+
+  calculateRotations();
 
   //This initializes glut
   glutInit(&argc, argv);
