@@ -91,6 +91,9 @@ typedef struct color color;
 
 Viewport  viewport;
 
+//used for rendering cylinderes;
+GLUquadricObj *quadric=gluNewQuadric();
+
 int checkpoint_counter = 0;
 
 float increment_amount = 0.01f;
@@ -1057,7 +1060,51 @@ void drawSphere(vec3* pos) {
   //drawTriangle(*triangle)
   glPushMatrix();
       glTranslated(pos->x,pos->y,pos->z);
-      glutSolidSphere(0.1,50,50); //radius,slices,stacks
+      glutSolidSphere(0.1,30,30); //radius,slices,stacks
+  glPopMatrix();
+}
+
+//taken shamelessly from http://lifeofaprogrammergeek.blogspot.com/2008/07/rendering-cylinder-between-two-points.html
+void renderCylinder(vec3* a, vec3* b, float radius, int subdivisions)
+{
+  float x1 = a->x;
+  float y1 = a->y;
+  float z1 = a->z;
+
+  float x2 = b->x;
+  float y2 = b->y;
+  float z2 = b->z;
+
+  float vx = x2-x1;
+  float vy = y2-y1;
+  float vz = z2-z1;
+
+  //handle the degenerate case of z1 == z2 with an approximation
+  if(vz == 0)
+      vz = .0001;
+
+  float v = sqrt( vx*vx + vy*vy + vz*vz );
+  float ax = 57.2957795*acos( vz/v );
+  if ( vz < 0.0 )
+      ax = -ax;
+  float rx = -vy*vz;
+  float ry = vx*vz;
+  glPushMatrix();
+
+  //draw the cylinder body
+  glTranslatef( x1,y1,z1 );
+  glRotatef(ax, rx, ry, 0.0);
+  gluQuadricOrientation(quadric,GLU_OUTSIDE);
+  gluCylinder(quadric, radius, radius, v, subdivisions, 1);
+
+  //draw the first cap
+  gluQuadricOrientation(quadric,GLU_INSIDE);
+  gluDisk( quadric, 0.0, radius, subdivisions, 1);
+  glTranslatef( 0,0,v );
+
+  //draw the second cap
+  gluQuadricOrientation(quadric,GLU_OUTSIDE);
+  gluDisk( quadric, 0.0, radius, subdivisions, 1);
   glPopMatrix();
 }
 
@@ -1066,6 +1113,10 @@ void drawSphereJoints() {
   //temporary to hold
   vec3 rotations[joint_count];
   vec3 temp;
+
+  float real_increment = current_increment;
+  if (real_increment < 0)
+    real_increment = 0;
 
   //calculate rotation vectors for this frame
   for (int i = 0; i < joint_count; i++) {
@@ -1076,7 +1127,7 @@ void drawSphereJoints() {
     //difference in rotation vector
     subtract(&temp, &temp, &(rotations[i]));
     //interpolate difference by current icnrement
-    scale(&temp, &temp, current_increment);
+    scale(&temp, &temp, real_increment);
     //add to current
     add(&(rotations[i]), &(rotations[i]), &temp);
   }
@@ -1085,6 +1136,9 @@ void drawSphereJoints() {
   findRealCoordinates(positions, rotations, lengths, joint_count);
   for (int i = 0; i < joint_count; i++) {
     drawSphere(&(positions[i]));
+    if (i != joint_count - 1) {
+      renderCylinder(&(positions[i]), &(positions[i+1]), 0.05, 30);
+    }
   }
 }
 
@@ -1119,7 +1173,7 @@ void myDisplay() {
     //move to next
     checkpoint_counter += 1;
     checkpoint_counter = checkpoint_counter % goal_count;
-    current_increment = 0.0f;
+    current_increment = -1.0f;
   }
   drawSphereJoints();
 
@@ -1183,6 +1237,8 @@ int main(int argc, char *argv[]) {
   glutReshapeFunc(myReshape);       // function to run when the window gets resized
   glutKeyboardFunc(myKeyPressed);
   //glutSpecialFunc(mySpecialInput);
+
+  gluQuadricNormals(quadric, GLU_SMOOTH);
 
   glutTimerFunc(100, timerFunc, 1);
 
