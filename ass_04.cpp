@@ -93,10 +93,22 @@ Viewport  viewport;
 
 int checkpoint_counter = 0;
 
-//all points
+float increment_amount = 0.01f;
+float current_increment = 0.0f;
+
+float* lengths;
+
+int joint_count;
+
+int goal_count;
+
+bool paused = false;
+
 std::vector<vector<vec3>> rotation_frames;
 
 void myDisplay();
+
+void calculateRotations(vec3 rotations[], vec3* goal, int n);
 
 void updateCalculations(float rotation_matrices[][3][3], vec3 pi_vectors[], 
   float transformation_matrices[][4][4], vec3 rotations[], float lengths[], int n);
@@ -188,8 +200,8 @@ void myKeyPressed(unsigned char key, int x, int y) {
     cleanup();
     exit(0);
   }
-  else if (key == 's') {
-    //key
+  else if (key == 'p') {
+    paused = !paused;
   }
   //myDisplay();
 }
@@ -782,36 +794,58 @@ void updateCalculations(float rotation_matrices[][3][3], vec3 pi_vectors[],
   }
 }
 
-void calculateRotations() {
+void initializeParameters() {
+
   //initialize rotations + setup stuff relevant to this assignment in particular
   //replace the below with some arg passing
   //these are default system params
   int n = 4;
-  float lengths[n];
+  joint_count = 4;
+  lengths = (float*)malloc(sizeof(float) * n);
   lengths[0] = 1;
   lengths[1] = 2;
   lengths[2] = 3;
   lengths[3] = 4;
 
   // array of rotations; size n
-  vec3* rotations;
+  vec3 rotations[n];
   vec3 zero;
-  /*zero.x = 1.57f;
-  zero.y = 1.57f;
-  zero.z = 1.57f;*/
   zero.x = 0;
   zero.y = 0;
   zero.z = 0;
 
-  rotations = (vec3*) malloc(n * sizeof(vec3));
   for (int i = 0; i < n; i++) {
     set(&(rotations[i]), &zero);
   }
 
-  vec3 goal;
-  goal.x = 1;
-  goal.y = 2;
-  goal.z = 1;
+  goal_count = 4;
+
+  vec3 goals[goal_count];
+  goals[0] = {2, 2, 1};
+  goals[1] = {0, 0, 0};
+  goals[2] = {-1, 3, 4};
+  goals[3] = {1, 0, 0};
+
+  rotation_frames.clear();
+
+  vector<vec3> temp_initial;
+  for (int f = 0; f < n; f++) {
+    temp_initial.push_back(rotations[f]);
+  }
+  rotation_frames.push_back(temp_initial);
+
+  for (int i = 0; i < goal_count; i++) {
+    vector<vec3> temp;
+    calculateRotations(rotations, &(goals[i]), n);
+    //copy into our frames
+    for (int f = 0; f < n; f++) {
+      temp.push_back(rotations[f]);
+    }
+    rotation_frames.push_back(temp);
+  }
+}
+
+void calculateRotations(vec3 rotations[], vec3* goal, int n) {
 
   float epsilon = 0.01f;
   float lambda = 0.001f;
@@ -833,12 +867,12 @@ void calculateRotations() {
 
   vec3 end_effector;
   findEndEffector(&end_effector, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
-  cout << "initial" << endl;
-  visualizeVector(&end_effector);
+  //cout << "initial" << endl;
+  //visualizeVector(&end_effector);
 
   int iter_count = 0;
-  while((!reachedGoal(&end_effector, &goal, lengths, n, epsilon)) && iter_count < max_iter) {
-    updateJoint(rotations, &end_effector, &goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n, lambda);
+  while((!reachedGoal(&end_effector, goal, lengths, n, epsilon)) && iter_count < max_iter) {
+    updateJoint(rotations, &end_effector, goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n, lambda);
     updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
     //save points from updateCalculations to allpoints
     
@@ -849,17 +883,9 @@ void calculateRotations() {
 
     iter_count += 1;
   }
-  cout << "end" << endl;
-  visualizeVector(&end_effector);
-  cout << "iters " << iter_count << endl;
-
-
-  vec3 positions[n];
-  findRealCoordinates(positions, rotations, lengths, n);
-  for (int i = 0; i < n; i++) {
-    cout << "pos " << i << ": ";
-    visualizeVector(&(positions[i]));
-  }
+  //cout << "end" << endl;
+  //visualizeVector(&end_effector);
+  //cout << "iters " << iter_count << endl;
 }
 
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon) {
@@ -1026,6 +1052,49 @@ void drawTriangle(triangle *triangle) {
 //****************************************************
 // function that does the actual drawing of stuff
 //***************************************************
+
+void drawSphere(vec3* pos) {
+  //drawTriangle(*triangle)
+  glPushMatrix();
+      glTranslated(pos->x,pos->y,pos->z);
+      glutSolidSphere(0.1,50,50); //radius,slices,stacks
+  glPopMatrix();
+}
+
+void drawSphereJoints() {
+
+  //temporary to hold
+  vec3 rotations[joint_count];
+  vec3 temp;
+
+  //calculate rotation vectors for this frame
+  for (int i = 0; i < joint_count; i++) {
+    //rotation from previous frame
+    rotations[i] = rotation_frames.at(checkpoint_counter).at(i);
+    //rotation to reach toward
+    set(&temp, &(rotation_frames.at(checkpoint_counter + 1).at(i)));
+    //difference in rotation vector
+    subtract(&temp, &temp, &(rotations[i]));
+    //interpolate difference by current icnrement
+    scale(&temp, &temp, current_increment);
+    //add to current
+    add(&(rotations[i]), &(rotations[i]), &temp);
+  }
+
+  vec3 positions[joint_count];
+  findRealCoordinates(positions, rotations, lengths, joint_count);
+  for (int i = 0; i < joint_count; i++) {
+    drawSphere(&(positions[i]));
+  }
+}
+
+void timerFunc(int v) {
+  if (!paused) {
+    glutPostRedisplay();
+  }
+  glutTimerFunc(100,timerFunc, v + 1);
+}
+
 void myDisplay() {
 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1036,19 +1105,23 @@ void myDisplay() {
   /*float xpos = vdistance * cos(angle) * cos(z_angle);
   float ypos = vdistance * sin(angle) * cos(z_angle);
   float zpos = vdistance * sin(z_angle);*/
-  float xpos = 0;
+  float xpos = 7;
   float ypos = 5;
-  float zpos = 0;
+  float zpos = 6;
   
   gluLookAt(xpos, ypos, zpos,     // eye position
             0.0f, 0.0f, 0.0f,     // where to look at
             0.0f, 0.0f, 1.0f);    // up vector*/
 
-  //drawTriangle(*triangle)
-  glPushMatrix();
-      glTranslated(0.0,0.0,0.0);
-      glutSolidSphere(1,50,50);
-  glPopMatrix();
+
+  current_increment += increment_amount;
+  if (current_increment >= 1.0f) {
+    //move to next
+    checkpoint_counter += 1;
+    checkpoint_counter = checkpoint_counter % goal_count;
+    current_increment = 0.0f;
+  }
+  drawSphereJoints();
 
   //go through allpoints, render balls + joints
 
@@ -1087,7 +1160,7 @@ int main(int argc, char *argv[]) {
 
   //do processing here
 
-  calculateRotations();
+  initializeParameters();
 
   //This initializes glut
   glutInit(&argc, argv);
@@ -1110,6 +1183,8 @@ int main(int argc, char *argv[]) {
   glutReshapeFunc(myReshape);       // function to run when the window gets resized
   glutKeyboardFunc(myKeyPressed);
   //glutSpecialFunc(mySpecialInput);
+
+  glutTimerFunc(100, timerFunc, 1);
 
   glutMainLoop();             // infinite loop that will keep drawing and resizing
   // and whatever else
