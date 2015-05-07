@@ -949,9 +949,14 @@ void calculateRi(float dest[][3], vec3* rotation) {
   vec3 axis;
   set(&axis, rotation);
 
-  float theta = magnitude(rotation);
+  float theta = fmod(magnitude(rotation), 2*PI);
   if (theta != 0) {
     normalize(&axis);
+  }
+  else {
+    axis.x = 1.0f;
+    axis.y = 0.0f;
+    axis.z = 0.0f;
   }
 
   float temp[3][3];
@@ -1109,35 +1114,68 @@ void renderCylinder(vec3* a, vec3* b, float radius, int subdivisions)
 }
 
 void drawSphereJoints() {
-
   //temporary to hold
   vec3 rotations[joint_count];
-  vec3 temp;
+  vec3 current, next;
+
+  vec3 one;
+  one.x = 1;
+  one.y = 0;
+  one.z = 0;
 
   float real_increment = current_increment;
   if (real_increment < 0)
     real_increment = 0;
 
   //calculate rotation vectors for this frame
+  float cur_mag, next_mag, new_mag;
+  float angle_rot;
   for (int i = 0; i < joint_count; i++) {
     //rotation from previous frame
-    rotations[i] = rotation_frames.at(checkpoint_counter).at(i);
-    //rotation to reach toward
-    set(&temp, &(rotation_frames.at(checkpoint_counter + 1).at(i)));
+    set(&current, &(rotation_frames.at(checkpoint_counter % goal_count).at(i)));
+    cur_mag = magnitude(&current);
+    if (cur_mag != 0)
+      normalize(&current);
+    else
+      set(&current, &one);
+
+    set(&next, &(rotation_frames.at( (checkpoint_counter + 1 ) % goal_count).at(i)));
+    next_mag = magnitude(&next);
+    if (next_mag != 0)
+      normalize(&next);
+    else
+      set(&next, &one);
+
+    angle_rot = next_mag - cur_mag;
+    if (angle_rot > PI || angle_rot < -PI) {
+      angle_rot = - angle_rot;
+    }
+
+    new_mag = fmod((cur_mag + real_increment * (next_mag - cur_mag)), (2*PI));
+
     //difference in rotation vector
-    subtract(&temp, &temp, &(rotations[i]));
+    subtract(&next, &next, &current);
     //interpolate difference by current icnrement
-    scale(&temp, &temp, real_increment);
+    scale(&next, &next, real_increment);
     //add to current
-    add(&(rotations[i]), &(rotations[i]), &temp);
+    add(&(rotations[i]), &current, &next);
+    normalize(&(rotations[i]));
+    scale(&(rotations[i]), &(rotations[i]), new_mag);
   }
+
+  vec3 zero = {0, 0, 0};
+
+  drawSphere(&zero);
 
   vec3 positions[joint_count];
   findRealCoordinates(positions, rotations, lengths, joint_count);
   for (int i = 0; i < joint_count; i++) {
     drawSphere(&(positions[i]));
-    if (i != joint_count - 1) {
-      renderCylinder(&(positions[i]), &(positions[i+1]), 0.05, 30);
+    if (i != 0) {
+      renderCylinder(&(positions[i]), &(positions[i-1]), 0.05, 30);
+    }
+    else {
+      renderCylinder(&(positions[i]), &zero, 0.05, 30);
     }
   }
 }
@@ -1146,7 +1184,7 @@ void timerFunc(int v) {
   if (!paused) {
     glutPostRedisplay();
   }
-  glutTimerFunc(100,timerFunc, v + 1);
+  glutTimerFunc(50,timerFunc, v + 1);
 }
 
 void myDisplay() {
@@ -1172,8 +1210,8 @@ void myDisplay() {
   if (current_increment >= 1.0f) {
     //move to next
     checkpoint_counter += 1;
-    checkpoint_counter = checkpoint_counter % goal_count;
-    current_increment = -1.0f;
+    //checkpoint_counter = checkpoint_counter % goal_count;
+    current_increment = -0.1f;
   }
   drawSphereJoints();
 
@@ -1188,7 +1226,7 @@ void myDisplay() {
 //****************************************************
 int main(int argc, char *argv[]) {
 
-  testFunction();
+  //testFunction();
 
   //parse in command line arguments
   /*if (argc < 3) {
@@ -1240,7 +1278,7 @@ int main(int argc, char *argv[]) {
 
   gluQuadricNormals(quadric, GLU_SMOOTH);
 
-  glutTimerFunc(100, timerFunc, 1);
+  glutTimerFunc(50, timerFunc, 1);
 
   glutMainLoop();             // infinite loop that will keep drawing and resizing
   // and whatever else
