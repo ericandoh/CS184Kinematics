@@ -91,12 +91,10 @@ typedef struct color color;
 
 Viewport  viewport;
 
-int frame_count = 1000;
+int checkpoint_counter = 0;
 
 //all points
-std::vector<vec3> allpoints;
-
-std::vector<float> dr_lst;
+std::vector<vector<vec3>> rotation_frames;
 
 void myDisplay();
 
@@ -110,6 +108,8 @@ bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float e
 void calculateJacobian(float** jac, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n);
 
 void calculateRi(float dest[][3], vec3* rotation);
+
+void findRealCoordinates(vec3 positions[], vec3 rotations[], float lengths[], int n);
 
 //****************************************************
 // Simple init function
@@ -686,6 +686,7 @@ void solveForDP(float dr[], float** jac, vec3* dp, int n) {
   }
 }
 
+/*
 void finddr(float** pseudo_inverse, vec3* vec, int n) {
   dr_lst.clear();
   float val;
@@ -696,7 +697,7 @@ void finddr(float** pseudo_inverse, vec3* vec, int n) {
     val += pseudo_inverse[i][2] * vec->z;
     dr_lst.push_back(val);
   }
-}
+}*/
 
 //****************************************************
 // Meat of the assignment
@@ -809,10 +810,10 @@ void calculateRotations() {
 
   vec3 goal;
   goal.x = 1;
-  goal.y = 1;
+  goal.y = 2;
   goal.z = 1;
 
-  float epsilon = 0.001f;
+  float epsilon = 0.01f;
   float lambda = 0.001f;
 
   int max_iter = 7000;
@@ -836,7 +837,7 @@ void calculateRotations() {
   visualizeVector(&end_effector);
 
   int iter_count = 0;
-  while(!reachedGoal(&end_effector, &goal, lengths, n, epsilon) && iter_count < max_iter) {
+  while((!reachedGoal(&end_effector, &goal, lengths, n, epsilon)) && iter_count < max_iter) {
     updateJoint(rotations, &end_effector, &goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n, lambda);
     updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
     //save points from updateCalculations to allpoints
@@ -851,6 +852,14 @@ void calculateRotations() {
   cout << "end" << endl;
   visualizeVector(&end_effector);
   cout << "iters " << iter_count << endl;
+
+
+  vec3 positions[n];
+  findRealCoordinates(positions, rotations, lengths, n);
+  for (int i = 0; i < n; i++) {
+    cout << "pos " << i << ": ";
+    visualizeVector(&(positions[i]));
+  }
 }
 
 bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float epsilon) {
@@ -866,6 +875,28 @@ bool reachedGoal(vec3* end_effector, vec3* goal, float lengths[], int n, float e
   float goalreach = magnitude(goal);
 
   return dist < epsilon || maxreach < goalreach - epsilon;
+}
+
+void findRealCoordinates(vec3 positions[], vec3 rotations[], float lengths[], int n) {
+  //used in real time to calculate joint position based on current rotations
+  float rotation_matrices[n][3][3];
+
+  //variable to hold all pi displacement vectors
+  vec3 pi_vectors[n];
+
+  //variable to hold all Xi transformation matrices
+  float transformation_matrices[n][4][4];
+
+  updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
+
+  float x_n_to_zero[4][4];
+  for (int i = 0; i < n; i++) {
+    setIdentity4(x_n_to_zero);
+    for (int k = 0; k < i; k++) {
+      mulMatrix4(x_n_to_zero, x_n_to_zero, transformation_matrices[k]);
+    }
+    applyTransform(&(positions[i]), x_n_to_zero, &(pi_vectors[i]));
+  }
 }
 
 void findEndEffector(vec3* end_effector, float rotation_matrices[][3][3], float transformation_matrices[][4][4], vec3* pn, int n) { 
