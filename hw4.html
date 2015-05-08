@@ -17,13 +17,23 @@
 		<p> and </p>
 		<a href="http://inst.cs.berkeley.edu/~CS184-ce"/>Richard Jiang</a><br><br>
 		<p>This is our implementation of an IK solver using a gradient descent algorithm and Jacobian matrices.<br>
-      Aside from working with any number of joints and any length arms, it also is able to trace out any goal path.<br>
-      Check out the video below demonstrating the solver at work with 4 joints!<br><br>
-      <iframe width="560" height="315" src="https://www.youtube.com/embed/Bm-Ijm5X84w" frameborder="0" allowfullscreen></iframe>
-		</p><br><br>
+      We followed the method using the pseudo-inverse of the Jacobian as detailed on piazza.<br>
+      The root link is attached to an immobile ball joint, the solver works with out-of-reach goals, and it also works<br>
+      on goals that take it through the base joint. Aside from working with any number of joints and any length arms,<br>
+      it also is able to trace out any goal path.<br><br>
+      Here is a video demonstrating the solver at work with 4 links of lengths 1, 2, 2, and 1 and an elliptic path:<br><br>
+      <iframe width="420" height="315" src="https://www.youtube.com/embed/zXwsz7yhT3w" frameborder="0" allowfullscreen></iframe><br><br>
+      Here's the solver working with 5 links of lengths 1, 2, 2, 1, and 1 and a figure eight path:<br><br>
+      <iframe width="420" height="315" src="https://www.youtube.com/embed/a3uTTqGaWus" frameborder="0" allowfullscreen></iframe><br><br>
+      For some extra credit fun, here it is at work with 5 links of lengths 5, 4, 3, 2, and 1, and the same path:<br><br>
+      <iframe width="420" height="315" src="https://www.youtube.com/embed/i_8JDr8DNcc" frameborder="0" allowfullscreen></iframe><br><br>
+      And here it is at work with 6 links of lengths 6, 5, 4, 3, 2, and 1, and the same path:<br><br>
+      <iframe width="420" height="315" src="https://www.youtube.com/embed/tjC6SiBryKo" frameborder="0" allowfullscreen></iframe><br><br>
+      Enjoy!
+    </p><br><br>
 	</div>
 	<div class="hidden" id="image" style="text-align:center;">
-		<img name="sphere" src="background.jpeg" alt="This is a sphere with really nice Phong shading" width="40%"><br><br>
+		<img name="sphere" src="background.png" width="40%"><br><br>
 		<p id="imgdescription">This is a really goddam nice sphere. </p>
 	</div>
 </body>

@@ -93,9 +93,9 @@ float current_increment = 0.0f;
 
 float* lengths;
 
-const int joint_count = 4;
+const int joint_count = 6;
 
-const int goal_count = 20;
+const int goal_count = 80;
 
 bool paused = false;
 
@@ -550,10 +550,12 @@ void initializeParameters() {
   //these are default system params
   const int n = joint_count;
   lengths = (float*)malloc(sizeof(float) * joint_count);
-  lengths[0] = 1;
-  lengths[1] = 2;
-  lengths[2] = 2;
-  lengths[3] = 1;
+  lengths[0] = 6;
+  lengths[1] = 5;
+  lengths[2] = 4;
+  lengths[3] = 3;
+  lengths[4] = 2;
+  lengths[5] = 1;
 
   // array of rotations; size n
   vec3 rotations[joint_count];
@@ -566,8 +568,11 @@ void initializeParameters() {
     set(&(rotations[i]), &zero);
   }
 
-  for (int i = 0; i < goal_count; i++) {
-	  goals[i] = {(float)(4*sin(2*i*PI/goal_count) + 4), (float)(2*cos(2*i*PI/goal_count)), 0};
+  for (int i = 0; i < goal_count / 2; i++) {
+	  goals[i] = { (float)(4 * cos(2 * i*PI / (goal_count / 2)) - 4), (float)(2 * sin(2 * i*PI / (goal_count / 2))), 0 };
+  }
+  for (int i = 0; i < goal_count / 2; i++) {
+	  goals[i + (goal_count / 2)] = {(float)(-4*cos(2*i*PI/(goal_count / 2)) + 4), (float)(2*sin(2*i*PI/(goal_count / 2))), 0};
   }
 
 
@@ -592,7 +597,7 @@ void initializeParameters() {
 
 void calculateRotations(vec3 rotations[], vec3* goal, int n) {
 
-  float epsilon = 0.01f;
+  float epsilon = 0.005f;
   float lambda = 0.001f;
 
   int max_iter = 7000;
@@ -616,7 +621,7 @@ void calculateRotations(vec3 rotations[], vec3* goal, int n) {
   //visualizeVector(&end_effector);
 
   int iter_count = 0;
-  vec3 best_rotation[n];
+  vec3 best_rotation[joint_count];
   float best_dist = 1000000;
   float cur_dist = 0;
   vec3 temp;
@@ -924,7 +929,6 @@ void drawSphereJoints() {
 }
 
 void drawPath() {
-	
 	for (int i = 0; i < goal_count; i++) {
 		drawSphere(&(goals[i]));
 	}
@@ -935,7 +939,7 @@ void timerFunc(int v) {
   if (!paused) {
     glutPostRedisplay();
   }
-  glutTimerFunc(50,timerFunc, v + 1);
+  glutTimerFunc(30,timerFunc, v + 1);
 }
 
 void myDisplay() {
@@ -945,9 +949,6 @@ void myDisplay() {
   glMatrixMode(GL_MODELVIEW);             // indicate we are specifying camera transformations
   glLoadIdentity();               // make sure transformation is "zero'd"
 
-  /*float xpos = vdistance * cos(angle) * cos(z_angle);
-  float ypos = vdistance * sin(angle) * cos(z_angle);
-  float zpos = vdistance * sin(z_angle);*/
   float xpos = 0;
   float ypos = 20;
   float zpos = 10;
@@ -980,28 +981,6 @@ int main(int argc, char *argv[]) {
 
   //testFunction();
 
-  //parse in command line arguments
-  /*if (argc < 3) {
-    cout << "prgm must take in at least 2 arguments\n";
-    cout << "1st argument: .bez file\n";
-    cout << "2nd argument: param constant\n";
-    cout << "(optional) 3rd argument: -a (for adaptive)";
-    exit(0);
-  }
-
-  //ignore first arg - it is the name of this program
-  int argI = 3;
-  char *argument;
-  while(argI < argc) {
-    argument = argv[argI++];
-    if (strcmp(argument, "-a") == 0) {
-      //do stuff
-    }
-    else {
-      printf("Unknown argument %s\n", argv[argI++]);
-    }
-  }*/
-
   //do processing here
 
   initializeParameters();
@@ -1030,7 +1009,7 @@ int main(int argc, char *argv[]) {
 
   gluQuadricNormals(quadric, GLU_SMOOTH);
 
-  glutTimerFunc(50, timerFunc, 1);
+  glutTimerFunc(30, timerFunc, 1);
 
   glutMainLoop();             // infinite loop that will keep drawing and resizing
   // and whatever else
