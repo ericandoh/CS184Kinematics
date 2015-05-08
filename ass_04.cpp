@@ -616,6 +616,10 @@ void calculateRotations(vec3 rotations[], vec3* goal, int n) {
   //visualizeVector(&end_effector);
 
   int iter_count = 0;
+  vec3 best_rotation[n];
+  float best_dist = 1000000;
+  float cur_dist = 0;
+  vec3 temp;
   while((!reachedGoal(&end_effector, goal, lengths, n, epsilon)) && iter_count < max_iter) {
     updateJoint(rotations, &end_effector, goal, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n, lambda);
     updateCalculations(rotation_matrices, pi_vectors, transformation_matrices, rotations, lengths, n);
@@ -623,10 +627,26 @@ void calculateRotations(vec3 rotations[], vec3* goal, int n) {
     
     findEndEffector(&end_effector, rotation_matrices, transformation_matrices, &(pi_vectors[n-1]), n);
 
+    subtract(&temp, goal, &end_effector);
+    cur_dist = magnitude(&temp);
+    if (cur_dist < best_dist) {
+      for (int i = 0; i < n; i++) {
+        best_rotation[i] = rotations[i];
+      }
+      best_dist = cur_dist;
+    }
+
     //cout << "next" << endl;
     //visualizeVector(&end_effector);
 
     iter_count += 1;
+  }
+  if (iter_count == max_iter) {
+    //we failed
+    //pick best point during flailing
+    for (int i = 0; i < n; i++) {
+      rotations[i] = best_rotation[i];
+    }
   }
   //cout << "end" << endl;
   //visualizeVector(&end_effector);
@@ -928,9 +948,9 @@ void myDisplay() {
   /*float xpos = vdistance * cos(angle) * cos(z_angle);
   float ypos = vdistance * sin(angle) * cos(z_angle);
   float zpos = vdistance * sin(z_angle);*/
-  float xpos = 15;
-  float ypos = 15;
-  float zpos = 15;
+  float xpos = 0;
+  float ypos = 20;
+  float zpos = 10;
   
   gluLookAt(xpos, ypos, zpos,     // eye position
             0.0f, 0.0f, 0.0f,     // where to look at
