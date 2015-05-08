@@ -99,6 +99,8 @@ const int goal_count = 20;
 
 bool paused = false;
 
+vec3 goals[goal_count];
+
 std::vector<vector<vec3>> rotation_frames;
 
 void myDisplay();
@@ -564,9 +566,8 @@ void initializeParameters() {
     set(&(rotations[i]), &zero);
   }
 
-  vec3 goals[goal_count];
   for (int i = 0; i < goal_count; i++) {
-	  goals[i] = {(float)(7*sin(2*i*PI/goal_count)), (float)(4*cos(2*i*PI/goal_count)), 0};
+	  goals[i] = {(float)(4*sin(2*i*PI/goal_count) + 4), (float)(2*cos(2*i*PI/goal_count)), 0};
   }
 
 
@@ -902,6 +903,14 @@ void drawSphereJoints() {
   }
 }
 
+void drawPath() {
+	
+	for (int i = 0; i < goal_count; i++) {
+		drawSphere(&(goals[i]));
+	}
+}
+
+
 void timerFunc(int v) {
   if (!paused) {
     glutPostRedisplay();
@@ -919,9 +928,9 @@ void myDisplay() {
   /*float xpos = vdistance * cos(angle) * cos(z_angle);
   float ypos = vdistance * sin(angle) * cos(z_angle);
   float zpos = vdistance * sin(z_angle);*/
-  float xpos = 10;
-  float ypos = 10;
-  float zpos = 10;
+  float xpos = 15;
+  float ypos = 15;
+  float zpos = 15;
   
   gluLookAt(xpos, ypos, zpos,     // eye position
             0.0f, 0.0f, 0.0f,     // where to look at
@@ -936,6 +945,7 @@ void myDisplay() {
     current_increment = -0.1f;
   }
   drawSphereJoints();
+  drawPath();
 
   //go through allpoints, render balls + joints
 
