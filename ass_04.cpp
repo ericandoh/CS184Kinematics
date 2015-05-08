@@ -88,14 +88,14 @@ GLUquadricObj *quadric=gluNewQuadric();
 
 int checkpoint_counter = 0;
 
-float increment_amount = 0.01f;
+float increment_amount = 0.05f;
 float current_increment = 0.0f;
 
 float* lengths;
 
 const int joint_count = 4;
 
-const int goal_count = 10;
+const int goal_count = 20;
 
 bool paused = false;
 
@@ -566,17 +566,17 @@ void initializeParameters() {
 
   vec3 goals[goal_count];
   for (int i = 0; i < goal_count; i++) {
-	  goals[i] = {7*sin(2*i*PI/goal_count), 4*cos(2*i*PI/goal_count), 0};
+	  goals[i] = {(float)(7*sin(2*i*PI/goal_count)), (float)(4*cos(2*i*PI/goal_count)), 0};
   }
 
 
   rotation_frames.clear();
 
-  vector<vec3> temp_initial;
+  /*vector<vec3> temp_initial;
   for (int f = 0; f < n; f++) {
     temp_initial.push_back(rotations[f]);
   }
-  rotation_frames.push_back(temp_initial);
+  rotation_frames.push_back(temp_initial);*/
 
   for (int i = 0; i < goal_count; i++) {
     vector<vec3> temp;
@@ -845,6 +845,7 @@ void drawSphereJoints() {
   //calculate rotation vectors for this frame
   float cur_mag, next_mag, new_mag;
   float angle_rot;
+  float dot_prod;
   for (int i = 0; i < joint_count; i++) {
     //rotation from previous frame
     set(&current, &(rotation_frames.at(checkpoint_counter % goal_count).at(i)));
@@ -861,12 +862,18 @@ void drawSphereJoints() {
     else
       set(&next, &one);
 
-    angle_rot = next_mag - cur_mag;
-    if (angle_rot > PI || angle_rot < -PI) {
-      angle_rot = - angle_rot;
+    dot_prod = dotProduct(&next, &current);
+    if (dot_prod < 0) {
+      scale(&next, &next, -1);
+      next_mag = fmod(2*PI-next_mag, 2*PI);
     }
 
-    new_mag = fmod((cur_mag + real_increment * (next_mag - cur_mag)), (2*PI));
+    angle_rot = fmod(next_mag - cur_mag + 2*PI, 2*PI);
+    if (angle_rot > PI) {
+      angle_rot = angle_rot - (2*PI);
+    }
+
+    new_mag = fmod((cur_mag + real_increment * (angle_rot)), (2*PI));
 
     //difference in rotation vector
     subtract(&next, &next, &current);
